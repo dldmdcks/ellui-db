@@ -21,8 +21,13 @@ if not os.path.exists('token.json'):
 # 💡 접속을 허용할 대표님과 직원분들의 이메일을 여기에 계속 추가하시면 됩니다.
 ALLOWED_USERS = ["dldmdcks94@gmail.com"] 
 
+import json
+
+# 금고에서 꺼낸 글씨를 진짜 열쇠 데이터(dict)로 변환
+creds_dict = json.loads(st.secrets["credentials_json"])
+
 authenticator = Authenticate(
-    secret_credentials_path='credentials.json',
+    secret_credentials_dict=creds_dict,  # <--- 파일 경로 대신 '데이터 직접 전달'로 변경!
     cookie_name='ellui_cookie',
     cookie_key='ellui_secret_key',
     redirect_uri='https://ellui-db.streamlit.app/',

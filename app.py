@@ -7,7 +7,7 @@ import json
 # 1. 웹사이트 기본 설정
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="centered")
 
-# --- 💡 [보안] 금고(Secrets)에서 정보를 직접 읽어오는 설정 (파일 없이도 작동하게 함) ---
+# --- 💡 금고(Secrets)에서 정보를 직접 읽어오는 설정 ---
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
 except Exception as e:
@@ -17,7 +17,7 @@ except Exception as e:
 # 2. 구글 로그인 및 권한 설정
 ALLOWED_USERS = ["dldmdcks94@gmail.com"] 
 
-# 🚨 [중요] 모든 설정값이 포함된 로그인 도구입니다.
+# 🚨 필수 인자(dict, cookie_name, cookie_key, redirect_uri)를 모두 채웠습니다.
 authenticator = Authenticate(
     secret_credentials_dict=creds_dict,
     cookie_name='ellui_cookie',
@@ -39,17 +39,15 @@ if st.session_state.get('connected'):
         st.error(f"⚠️ 접속 권한이 없습니다. 대표님께 등록을 요청하세요. ({user_email})")
         st.stop()
 
-    # --- 사이드바 ---
     st.sidebar.success(f"✅ 인증완료: **{user_info.get('name')}** 님")
     if st.sidebar.button("로그아웃"):
         authenticator.logout()
 
     st.title("🏠 엘루이 매물관리 어시스턴트")
 
-    # --- 구글 시트 연결 ---
+    # --- 구글 시트 연결 (파일 없이 금고 데이터로 인증) ---
     @st.cache_resource
     def init_connection():
-        # 파일 경로(json) 대신 금고 데이터로 직접 연결합니다.
         gc = gspread.oauth_from_dict(creds_dict)
         sheet_id = '121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA'
         return gc.open_by_key(sheet_id).sheet1
@@ -152,7 +150,6 @@ if st.session_state.get('connected'):
                     clean_phone = "".join(filter(str.isdigit, phone))
                     if len(clean_phone) == 11: clean_phone = f"{clean_phone[:3]}-{clean_phone[3:7]}-{clean_phone[7:]}"
                     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    # 저장할 데이터 배열
                     new_row = [clean_addr, room, name, birth, clean_phone, "", "", "", "", "", memo, now, "시스템(웹)", "정상"]
                     
                     try:

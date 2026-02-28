@@ -9,20 +9,21 @@ st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_ico
 
 # --- 💡 금고(Secrets)에서 정보를 직접 읽어오는 설정 ---
 try:
+    # 스트림릿 설정창(Secrets)에 넣은 글자를 파이썬이 읽을 수 있게 변환합니다.
     creds_dict = json.loads(st.secrets["credentials_json"])
 except Exception as e:
-    st.error("❌ 스트림릿 Secrets 설정에서 'credentials_json'을 확인해주세요.")
+    st.error("❌ 스트림릿 Secrets 설정에서 'credentials_json' 내용을 확인해주세요.")
     st.stop()
 
 # 2. 구글 로그인 및 권한 설정
 ALLOWED_USERS = ["dldmdcks94@gmail.com"] 
 
-# 🚨 필수 인자(dict, cookie_name, cookie_key, redirect_uri)를 모두 채웠습니다.
+# 🚨 [해결] TypeError 방지를 위해 필수 인자 4개를 완벽히 채웠습니다.
 authenticator = Authenticate(
     secret_credentials_dict=creds_dict,
     cookie_name='ellui_cookie',
     cookie_key='ellui_secret_key',
-    redirect_uri='https://ellui-db.streamlit.app/',
+    redirect_uri='https://ellui-db.streamlit.app/'
 )
 
 # 로그인 체크 및 화면 표시
@@ -39,6 +40,7 @@ if st.session_state.get('connected'):
         st.error(f"⚠️ 접속 권한이 없습니다. 대표님께 등록을 요청하세요. ({user_email})")
         st.stop()
 
+    # --- 사이드바 ---
     st.sidebar.success(f"✅ 인증완료: **{user_info.get('name')}** 님")
     if st.sidebar.button("로그아웃"):
         authenticator.logout()
@@ -48,6 +50,7 @@ if st.session_state.get('connected'):
     # --- 구글 시트 연결 (파일 없이 금고 데이터로 인증) ---
     @st.cache_resource
     def init_connection():
+        # gspread 도구에게 금고 정보를 바로 넘겨줍니다.
         gc = gspread.oauth_from_dict(creds_dict)
         sheet_id = '121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA'
         return gc.open_by_key(sheet_id).sheet1
@@ -61,7 +64,7 @@ if st.session_state.get('connected'):
     def load_data():
         return worksheet.get_all_values()[1:]
 
-    # --- 메인 기능 탭 3개 ---
+    # --- 검색/등록 탭 기능 (누락 없이 전체 포함) ---
     tab1, tab2, tab3 = st.tabs(["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"])
 
     # [탭 1] 주소 검색
@@ -151,7 +154,6 @@ if st.session_state.get('connected'):
                     if len(clean_phone) == 11: clean_phone = f"{clean_phone[:3]}-{clean_phone[3:7]}-{clean_phone[7:]}"
                     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     new_row = [clean_addr, room, name, birth, clean_phone, "", "", "", "", "", memo, now, "시스템(웹)", "정상"]
-                    
                     try:
                         worksheet.append_row(new_row)
                         st.success(f"✅ {name}님의 데이터가 저장되었습니다!")

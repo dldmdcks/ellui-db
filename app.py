@@ -2,13 +2,24 @@ import streamlit as st
 import gspread
 from datetime import datetime
 from streamlit_google_auth import Authenticate
+import os
 
 # 1. 웹사이트 기본 설정
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="centered")
 
+# --- 💡 [중요] 비밀 금고(Secrets)에서 열쇠를 꺼내오는 마술 코드 ---
+if not os.path.exists('credentials.json'):
+    with open('credentials.json', 'w', encoding='utf-8') as f:
+        f.write(st.secrets["credentials_json"])
+
+if not os.path.exists('token.json'):
+    with open('token.json', 'w', encoding='utf-8') as f:
+        f.write(st.secrets["token_json"])
+# -----------------------------------------------------------
+
 # 2. 구글 로그인 및 권한 설정
-# 💡 접속을 허용할 직원분들의 이메일을 여기에 계속 추가하시면 됩니다.
-ALLOWED_USERS = ["dldmdcks@gmail.com"] 
+# 💡 접속을 허용할 대표님과 직원분들의 이메일을 여기에 계속 추가하시면 됩니다.
+ALLOWED_USERS = ["dldmdcks94@gmail.com"] 
 
 authenticator = Authenticate(
     secret_credentials_path='credentials.json',

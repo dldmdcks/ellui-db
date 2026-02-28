@@ -7,7 +7,7 @@ import json
 # 1. 웹사이트 기본 설정
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="centered")
 
-# --- 💡 [보안] 금고(Secrets)에서 정보를 직접 읽어오는 설정 ---
+# --- 💡 [보안] 금고(Secrets)에서 정보를 직접 읽어오는 설정 (파일 없이도 작동하게 함) ---
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
 except Exception as e:
@@ -17,7 +17,7 @@ except Exception as e:
 # 2. 구글 로그인 및 권한 설정
 ALLOWED_USERS = ["dldmdcks94@gmail.com"] 
 
-# 파일 경로 대신 dict(데이터)를 직접 넣는 최신 방식입니다.
+# 🚨 [중요] 모든 설정값이 포함된 로그인 도구입니다.
 authenticator = Authenticate(
     secret_credentials_dict=creds_dict,
     cookie_name='ellui_cookie',
@@ -29,26 +29,27 @@ authenticator = Authenticate(
 authenticator.check_authentification()
 authenticator.login()
 
-# 3. 로그인 성공 시에만 아래 메인 프로그램 실행
+# 3. 로그인 성공 시 메인 프로그램 실행
 if st.session_state.get('connected'):
     user_info = st.session_state.get('user_info')
     user_email = user_info.get('email') if user_info else ""
     
+    # 허가된 이메일 체크
     if user_email not in ALLOWED_USERS:
         st.error(f"⚠️ 접속 권한이 없습니다. 대표님께 등록을 요청하세요. ({user_email})")
         st.stop()
 
-    # --- 사이드바 및 메인 타이틀 ---
+    # --- 사이드바 ---
     st.sidebar.success(f"✅ 인증완료: **{user_info.get('name')}** 님")
     if st.sidebar.button("로그아웃"):
         authenticator.logout()
 
     st.title("🏠 엘루이 매물관리 어시스턴트")
 
-    # --- 구글 시트 연결 (파일 없이 금고 정보로만 인증) ---
+    # --- 구글 시트 연결 ---
     @st.cache_resource
     def init_connection():
-        # 파일 대신 dict를 사용하여 인증하는 가장 안전한 방법입니다.
+        # 파일 경로(json) 대신 금고 데이터로 직접 연결합니다.
         gc = gspread.oauth_from_dict(creds_dict)
         sheet_id = '121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA'
         return gc.open_by_key(sheet_id).sheet1
@@ -62,11 +63,10 @@ if st.session_state.get('connected'):
     def load_data():
         return worksheet.get_all_values()[1:]
 
-    # ==========================================
-    # [탭 1] 주소 검색 (대표님 코드 그대로 보존)
-    # ==========================================
+    # --- 메인 기능 탭 3개 ---
     tab1, tab2, tab3 = st.tabs(["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"])
-    
+
+    # [탭 1] 주소 검색
     with tab1:
         st.subheader("지번으로 주소 찾기")
         col1, col2 = st.columns(2)
@@ -98,9 +98,7 @@ if st.session_state.get('connected'):
                             * **⏰ 등록일:** {reg_date}
                             """)
 
-    # ==========================================
-    # [탭 2] 소유주 검색 (대표님 코드 그대로 보존)
-    # ==========================================
+    # [탭 2] 소유주 검색
     with tab2:
         st.subheader("이름/생년월일로 소유주 찾기")
         col3, col4 = st.columns(2)
@@ -131,9 +129,7 @@ if st.session_state.get('connected'):
                             * **⏰ 등록일:** {reg_date}
                             """)
 
-    # ==========================================
-    # [탭 3] 신규 등록 (대표님 코드 그대로 보존)
-    # ==========================================
+    # [탭 3] 신규 등록
     with tab3:
         st.subheader("신규 매물 등록")
         with st.form("register_form"):
@@ -156,6 +152,7 @@ if st.session_state.get('connected'):
                     clean_phone = "".join(filter(str.isdigit, phone))
                     if len(clean_phone) == 11: clean_phone = f"{clean_phone[:3]}-{clean_phone[3:7]}-{clean_phone[7:]}"
                     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    # 저장할 데이터 배열
                     new_row = [clean_addr, room, name, birth, clean_phone, "", "", "", "", "", memo, now, "시스템(웹)", "정상"]
                     
                     try:
@@ -164,6 +161,6 @@ if st.session_state.get('connected'):
                     except Exception as e:
                         st.error(f"저장 실패: {e}")
 
-# 로그인 안 된 상태
+# 4. 로그인 전 화면
 else:
     st.warning("🔒 보안 구역입니다. 엘루이 매물관리 시스템을 이용하시려면 구글 계정으로 본인인증이 필요합니다.")

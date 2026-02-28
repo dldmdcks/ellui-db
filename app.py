@@ -3,30 +3,29 @@ import gspread
 from datetime import datetime
 from streamlit_google_auth import Authenticate
 import json
+import os
 
 # 1. 웹사이트 기본 설정
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="centered")
 
-# --- 💡 금고(Secrets)에서 정보를 직접 읽어오는 설정 ---
-try:
-    # 스트림릿 설정창(Secrets)에 넣은 글자를 파이썬이 읽을 수 있게 변환합니다.
-    creds_dict = json.loads(st.secrets["credentials_json"])
-except Exception as e:
-    st.error("❌ 스트림릿 Secrets 설정에서 'credentials_json' 내용을 확인해주세요.")
-    st.stop()
+# --- 💡 금고(Secrets) 정보를 임시 파일로 만드는 작업 ---
+# 도구가 '데이터'가 아닌 '파일 경로'만 원하므로, 파일을 생성해줍니다.
+if not os.path.exists('credentials.json'):
+    with open('credentials.json', 'w', encoding='utf-8') as f:
+        f.write(st.secrets["credentials_json"])
 
 # 2. 구글 로그인 및 권한 설정
-ALLOWED_USERS = ["dldmdcks94@gmail.com"] 
+ALLOWED_USERS = ["dldmdcks94@gmail.com"]
 
-# 🚨 [해결] TypeError 방지를 위해 필수 인자 4개를 완벽히 채웠습니다.
+# 🚨 [해결] 도구가 원하는 이름인 'secret_credentials_path'로 정확히 바꿨습니다!
 authenticator = Authenticate(
-    secret_credentials_dict=creds_dict,
+    secret_credentials_path='credentials.json',
     cookie_name='ellui_cookie',
     cookie_key='ellui_secret_key',
     redirect_uri='https://ellui-db.streamlit.app/'
 )
 
-# 로그인 체크 및 화면 표시
+# 로그인 체크 및 버튼 표시
 authenticator.check_authentification()
 authenticator.login()
 
@@ -35,23 +34,20 @@ if st.session_state.get('connected'):
     user_info = st.session_state.get('user_info')
     user_email = user_info.get('email') if user_info else ""
     
-    # 허가된 이메일 체크
     if user_email not in ALLOWED_USERS:
         st.error(f"⚠️ 접속 권한이 없습니다. 대표님께 등록을 요청하세요. ({user_email})")
         st.stop()
 
-    # --- 사이드바 ---
     st.sidebar.success(f"✅ 인증완료: **{user_info.get('name')}** 님")
     if st.sidebar.button("로그아웃"):
         authenticator.logout()
 
     st.title("🏠 엘루이 매물관리 어시스턴트")
 
-    # --- 구글 시트 연결 (파일 없이 금고 데이터로 인증) ---
+    # --- 구글 시트 연결 ---
     @st.cache_resource
     def init_connection():
-        # gspread 도구에게 금고 정보를 바로 넘겨줍니다.
-        gc = gspread.oauth_from_dict(creds_dict)
+        gc = gspread.oauth(credentials_filename='credentials.json')
         sheet_id = '121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA'
         return gc.open_by_key(sheet_id).sheet1
 
@@ -64,10 +60,9 @@ if st.session_state.get('connected'):
     def load_data():
         return worksheet.get_all_values()[1:]
 
-    # --- 검색/등록 탭 기능 (누락 없이 전체 포함) ---
+    # --- 검색 및 등록 탭 (기존 기능 100% 유지) ---
     tab1, tab2, tab3 = st.tabs(["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"])
 
-    # [탭 1] 주소 검색
     with tab1:
         st.subheader("지번으로 주소 찾기")
         col1, col2 = st.columns(2)
@@ -92,14 +87,8 @@ if st.session_state.get('connected'):
                         room_str = row[1] if "호" in row[1] else f"{row[1]}호"
                         with st.expander(f"📍 {row[0]} | {room_str} (소유주: {row[2]})"):
                             reg_date = row[11] if len(row) > 11 and row[11].strip() else "기록 없음"
-                            st.markdown(f"""
-                            * **👤 소유주:** {row[2]} ({row[3]})
-                            * **📞 연락처:** {row[4]}
-                            * **📝 특이사항:** {row[10]}
-                            * **⏰ 등록일:** {reg_date}
-                            """)
+                            st.markdown(f"* **👤 소유주:** {row[2]} ({row[3]})\n* **📞 연락처:** {row[4]}\n* **📝 특이사항:** {row[10]}\n* **⏰ 등록일:** {reg_date}")
 
-    # [탭 2] 소유주 검색
     with tab2:
         st.subheader("이름/생년월일로 소유주 찾기")
         col3, col4 = st.columns(2)
@@ -124,13 +113,8 @@ if st.session_state.get('connected'):
                         room_str = row[1] if "호" in row[1] else f"{row[1]}호"
                         with st.expander(f"👤 {row[2]} | 📍 {row[0]} {room_str}"):
                             reg_date = row[11] if len(row) > 11 and row[11].strip() else "기록 없음"
-                            st.markdown(f"""
-                            * **📞 연락처:** {row[4]}
-                            * **📝 특이사항:** {row[10]}
-                            * **⏰ 등록일:** {reg_date}
-                            """)
+                            st.markdown(f"* **📞 연락처:** {row[4]}\n* **📝 특이사항:** {row[10]}\n* **⏰ 등록일:** {reg_date}")
 
-    # [탭 3] 신규 등록
     with tab3:
         st.subheader("신규 매물 등록")
         with st.form("register_form"):

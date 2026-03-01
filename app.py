@@ -21,7 +21,7 @@ except Exception as e:
     st.error("❌ 금고 설정 에러를 확인해주세요.")
     st.stop()
 
-# 3. 로그인 URL 생성 함수 (🚨 아까 성공했던 100% 순수 직통 링크로 복구!)
+# 3. 로그인 URL 생성 함수
 def get_login_url():
     return f"https://accounts.google.com/o/oauth2/v2/auth?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=openid%20email%20profile"
 
@@ -63,8 +63,9 @@ if "code" in query_params and not st.session_state.connected:
 if not st.session_state.connected:
     st.warning("🔒 보안 구역입니다. 엘루이 매물관리 시스템을 이용하시려면 본인인증이 필요합니다.")
     login_url = get_login_url()
+    # 🚨 [핵심 해결] target="_top"으로 변경하여 스트림릿 액자(iframe)를 강제로 벗어납니다!
     st.markdown(f'''
-        <a href="{login_url}" target="_self">
+        <a href="{login_url}" target="_top">
             <button style="background-color:#4285F4; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">
                 🔵 Google 계정으로 로그인
             </button>
@@ -111,7 +112,7 @@ except Exception as e:
 def load_data():
     return worksheet.get_all_values()[1:]
 
-# 메인 탭 기능 (기존과 완벽히 동일)
+# 메인 탭 기능 
 tab1, tab2, tab3 = st.tabs(["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"])
 
 with tab1:

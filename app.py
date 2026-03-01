@@ -2,22 +2,19 @@ import streamlit as st
 import gspread
 from datetime import datetime
 from streamlit_google_auth import Authenticate
-import json
 import os
 
 # 1. 웹사이트 기본 설정
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="centered")
 
-# --- 💡 금고(Secrets) 정보를 임시 파일로 만드는 작업 ---
-# 도구가 '데이터'가 아닌 '파일 경로'만 원하므로, 파일을 생성해줍니다.
-if not os.path.exists('credentials.json'):
-    with open('credentials.json', 'w', encoding='utf-8') as f:
-        f.write(st.secrets["credentials_json"])
+# --- 🚨 [핵심 해결] 기존 파일이 있든 없든 무조건 최신 열쇠로 덮어쓰기! ---
+with open('credentials.json', 'w', encoding='utf-8') as f:
+    f.write(st.secrets["credentials_json"])
+# -----------------------------------------------------------------
 
 # 2. 구글 로그인 및 권한 설정
 ALLOWED_USERS = ["dldmdcks94@gmail.com"]
 
-# 🚨 [해결] 도구가 원하는 이름인 'secret_credentials_path'로 정확히 바꿨습니다!
 authenticator = Authenticate(
     secret_credentials_path='credentials.json',
     cookie_name='ellui_cookie',
@@ -47,6 +44,8 @@ if st.session_state.get('connected'):
     # --- 구글 시트 연결 ---
     @st.cache_resource
     def init_connection():
+        # 💡 안내: 로그인이 뚫리고 나면 이 부분에서 에러가 날 수 있습니다!
+        # (로봇 직원 계정 연결이라는 다음 단계가 필요하기 때문입니다)
         gc = gspread.oauth(credentials_filename='credentials.json')
         sheet_id = '121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA'
         return gc.open_by_key(sheet_id).sheet1
@@ -54,7 +53,7 @@ if st.session_state.get('connected'):
     try:
         worksheet = init_connection()
     except Exception as e:
-        st.error(f"구글 시트 연결 실패: {e}")
+        st.error(f"⚠️ 구글 시트 연결 실패 (정상적인 다음 단계입니다): {e}")
         st.stop()
 
     def load_data():

@@ -3,7 +3,6 @@ import gspread
 from datetime import datetime
 import json
 import requests
-import urllib.parse
 import os
 
 # 1. 웹사이트 기본 설정
@@ -22,18 +21,9 @@ except Exception as e:
     st.error("❌ 금고 설정 에러를 확인해주세요.")
     st.stop()
 
-# 3. 로그인 URL 생성 함수 (직통 링크)
+# 3. 로그인 URL 생성 함수 (🚨 아까 성공했던 100% 순수 직통 링크로 복구!)
 def get_login_url():
-    auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
-    params = {
-        "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
-        "response_type": "code",
-        "scope": "openid email profile",
-        "access_type": "offline",
-        "prompt": "select_account"
-    }
-    return f"{auth_url}?{urllib.parse.urlencode(params)}"
+    return f"https://accounts.google.com/o/oauth2/v2/auth?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=openid%20email%20profile"
 
 # 4. 로그인 상태 확인 (세션)
 if 'connected' not in st.session_state:

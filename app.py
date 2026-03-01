@@ -7,17 +7,16 @@ import requests
 import urllib.parse
 import re
 import pandas as pd
-from collections import Counter
 
 # 1. 웹사이트 기본 설정
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="wide")
 
-# 🚨 관리자 고정 이메일
 ADMIN_EMAIL = "dldmdcks94@gmail.com"
 
-# 2. 금고 설정 로드
+# 2. 로그인 및 DB 연결 설정
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
+    token_dict = json.loads(st.secrets["google_token_json"])
     CLIENT_ID = creds_dict["web"]["client_id"]
     CLIENT_SECRET = creds_dict["web"]["client_secret"]
     REDIRECT_URI = "https://ellui-db.streamlit.app/"
@@ -25,18 +24,7 @@ except Exception:
     st.error("❌ 금고 설정(Secrets)을 확인해주세요.")
     st.stop()
 
-# 3. 로그인 로직
-def get_login_url():
-    params = {
-        "client_id": CLIENT_ID, "redirect_uri": REDIRECT_URI,
-        "response_type": "code", "scope": "openid email profile",
-        "access_type": "offline", "prompt": "select_account"
-    }
-    return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
-
-if 'connected' not in st.session_state:
-    st.session_state.connected = False
-
+if 'connected' not in st.session_state: st.session_state.connected = False
 query_params = st.query_params
 if "code" in query_params and not st.session_state.connected:
     code = query_params["code"]
@@ -54,47 +42,58 @@ if "code" in query_params and not st.session_state.connected:
 
 if not st.session_state.connected:
     st.warning("🔒 엘루이 매물관리 시스템입니다. 본인인증 후 이용해주세요.")
-    st.link_button("🔵 Google 계정으로 로그인", get_login_url(), type="primary", use_container_width=True)
+    login_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=openid%20email%20profile&access_type=offline&prompt=select_account"
+    st.link_button("🔵 Google 계정으로 로그인", login_url, type="primary", use_container_width=True)
     st.stop()
 
-# ==========================================
-# 4. 데이터베이스 및 권한 관리
-# ==========================================
+# 3. 데이터베이스 및 권한 연동
 @st.cache_resource
 def get_ss():
-    token_dict = json.loads(st.secrets["google_token_json"])
     creds = Credentials.from_authorized_user_info(token_dict)
     return gspread.authorize(creds).open_by_key('121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA')
 
 ss = get_ss()
-ws_data = ss.sheet1 # 매물 데이터 시트
+ws_data = ss.sheet1
 
-# 💡 '직원명단' 시트가 없으면 자동으로 만듭니다.
-try:
-    ws_staff = ss.worksheet("직원명단")
-except:
+# 직원명단 및 수정요청 시트 자동 생성
+try: ws_staff = ss.worksheet("직원명단")
+except: 
     ws_staff = ss.add_worksheet(title="직원명단", rows="100", cols="5")
-    ws_staff.append_row(["이메일", "이름", "등록일"])
+    ws_staff.append_row(["이메일", "이름", "등록일", "보유토큰"])
 
-# 실시간 허용 이메일 목록 가져오기 (관리자 + 직원명단 시트의 이메일들)
-staff_emails = ws_staff.col_values(1)[1:]
-ALLOWED_USERS = [ADMIN_EMAIL] + staff_emails
+try: ws_request = ss.worksheet("수정요청")
+except: 
+    ws_request = ss.add_worksheet(title="수정요청", rows="100", cols="6")
+    ws_request.append_row(["요청일시", "요청직원", "대상주소", "대상호실", "요청내용", "처리상태"])
+
+# 권한 체크 및 사용자 정보 매핑
+staff_records = ws_staff.get_all_records()
+staff_dict = {str(row['이메일']).strip(): row for row in staff_records}
+ALLOWED_USERS = [ADMIN_EMAIL] + list(staff_dict.keys())
 
 user_email = st.session_state.user_info.get("email", "")
-user_name = st.session_state.user_info.get("name", "사용자")
-
 if user_email not in ALLOWED_USERS:
     st.error(f"⚠️ 승인되지 않은 계정입니다 ({user_email}). 대표님께 권한을 요청하세요.")
     st.stop()
 
-st.sidebar.success(f"👤 접속자: **{user_name}**")
+# 대표님은 본인 이름으로, 직원은 시트에 등록된 실명으로 세팅
+if user_email == ADMIN_EMAIL:
+    user_name, user_tokens, staff_row_index = "이응찬 대표", 999, None
+else:
+    user_name = staff_dict[user_email]['이름']
+    user_tokens = int(staff_dict[user_email].get('보유토큰', 0))
+    # 시트 내 행 번호 찾기 (+2는 헤더와 인덱스 차이 보정)
+    staff_row_index = list(staff_dict.keys()).index(user_email) + 2 
+
+# --- 사이드바: 내 정보 및 토큰 ---
+st.sidebar.markdown(f"### 👤 접속자: {user_name}")
+st.sidebar.metric(label="내 보유 열람권(토큰)", value=f"{user_tokens} 개")
+st.sidebar.write("---")
 if st.sidebar.button("로그아웃"):
     st.session_state.clear()
     st.rerun()
 
-st.title("🏠 엘루이 매물관리 어시스턴트")
-
-# --- 헬퍼 함수: 데이터 정제 ---
+# --- 헬퍼 함수 ---
 def clean_numeric(text): return re.sub(r'[^0-9]', '', text)
 def clean_bunji(text): return re.sub(r'[^0-9-]', '', text)
 def format_phone(text):
@@ -103,91 +102,145 @@ def format_phone(text):
     elif len(nums) == 10: return f"{nums[:3]}-{nums[3:6]}-{nums[6:]}"
     return nums
 
-# 5. 탭 구성
+# 토큰 업데이트 함수
+def update_token(amount):
+    if staff_row_index: # 관리자가 아닌 직원일 경우만 시트 업데이트
+        ws_staff.update_cell(staff_row_index, 4, user_tokens + amount)
+    st.cache_resource.clear()
+
+# 데이터 로드 및 최신순 정렬
+all_records = ws_data.get_all_values()[1:]
+all_records.reverse() # 💡 가장 최근 등록된 매물이 위로 올라오도록 리스트 뒤집기
+
+# 4. 메인 화면 탭 구성
 tabs_list = ["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"]
 if user_email == ADMIN_EMAIL: tabs_list.append("👑 관리자 전용")
 tabs = st.tabs(tabs_list)
 
-# --- [탭 1 & 2] 검색 (기존 로직 유지) ---
+# --- [탭 1] 주소 검색 ---
 with tabs[0]:
     st.subheader("지번으로 주소 찾기")
-    c1, c2 = st.columns(2); d = c1.text_input("동"); b = c2.text_input("번지")
-    if st.button("주소 검색", use_container_width=True):
-        res = [r for r in ws_data.get_all_values()[1:] if d in r[0] and b in r[0]]
-        st.write(f"검색 결과: {len(res)}건") # 상세 루프 생략
+    c1, c2 = st.columns(2); d = c1.text_input("동 (예: 방이동)"); b = c2.text_input("번지 (예: 28-2)")
+    if st.button("주소 검색", use_container_width=True, type="primary"):
+        res = [r for r in all_records if len(r) > 12 and (d.replace(" ","") in r[0].replace(" ","")) and (b.replace(" ","") in r[0].replace(" ",""))]
+        st.success(f"검색 결과: 최신순 {len(res)}건")
+        
+        for idx, row in enumerate(res):
+            addr, room, name, birth, phone, deposit, rent, end_date, _, _, memo, reg_date, registrar = (row + [""]*13)[:13]
+            # 💡 요약창 가독성 증대: 주소 | 호실 | 등록일 (등록자 숨김)
+            with st.expander(f"📍 {addr} | {room} | 📅 {reg_date[:10]}"):
+                st.markdown(f"**소유주:** {name} ({birth})\n\n**연락처:** {phone}\n\n**보증금/월세:** {deposit} / {rent}\n\n**만기일:** {end_date}\n\n**특이사항:** {memo}")
+                
+                # 수정 요청 폼
+                with st.form(f"edit_addr_{idx}", clear_on_submit=True):
+                    edit_memo = st.text_input("수정 요청 사유 (예: 연락처 변경)", key=f"req_{idx}")
+                    if st.form_submit_button("🛠 대표님께 수정 요청하기"):
+                        if edit_memo:
+                            ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, edit_memo, "대기중"])
+                            st.success("대표님께 수정 요청이 전송되었습니다!")
+                        else:
+                            st.warning("수정 요청 사유를 입력해주세요.")
 
-# --- [탭 3] 신규 등록 (🚨 요청하신 규칙 적용) ---
+# --- [탭 2] 소유주 검색 (💡 토큰 차감 로직 적용) ---
+with tabs[1]:
+    st.subheader("소유주 매물 검색 (상세조회 시 토큰 1개 차감)")
+    c3, c4 = st.columns(2); sn = c3.text_input("소유주 성함"); sb = c4.text_input("생년월일(6자리)")
+    if st.button("소유주 검색", use_container_width=True, type="primary"):
+        res = [r for r in all_records if len(r) > 12 and (sn in r[2]) and (not sb or sb == r[3])]
+        st.success(f"검색 결과: 최신순 {len(res)}건")
+        
+        for idx, row in enumerate(res):
+            addr, room, name, birth, phone, deposit, rent, end_date, _, _, memo, reg_date, registrar = (row + [""]*13)[:13]
+            
+            # 요약창에는 주소와 호실만 보여줌
+            with st.container():
+                st.markdown(f"#### 👤 {name} | {addr} {room}")
+                # 세션 스테이트를 활용하여 개별 매물의 열람 상태 저장
+                unlock_key = f"unlock_{addr}_{room}"
+                if st.session_state.get(unlock_key, False):
+                    st.info(f"**연락처:** {phone}  |  **특이사항:** {memo}  |  **만기/보증/월세:** {end_date} / {deposit} / {rent}")
+                else:
+                    if st.button(f"🔓 상세 정보 열람 (토큰 1개 차감)", key=f"btn_{idx}"):
+                        if user_tokens >= 1:
+                            update_token(-1) # 토큰 차감
+                            st.session_state[unlock_key] = True
+                            st.rerun()
+                        else:
+                            st.error("보유한 열람권(토큰)이 부족합니다. 신규 매물을 등록해주세요!")
+                st.write("---")
+
+# --- [탭 3] 신규 등록 ---
 with tabs[2]:
-    st.subheader("📝 신규 매물 등록")
-    with st.form("reg_form"):
+    st.subheader("📝 신규 매물 등록 (완료 시 토큰 +1 획득)")
+    with st.form("reg_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
             f_city = st.text_input("시/도", "서울")
-            f_dong = st.text_input("읍/면/동 (예: 방이동)")
-            f_bunji = st.text_input("번지 (숫자와 -만 입력)", placeholder="예: 28-2")
-            f_sub_dong = st.text_input("번지 뒤 '동' (없으면 0 입력)", value="0")
+            f_dong = st.text_input("읍/면/동 *", placeholder="방이동")
+            f_bunji = st.text_input("번지 *", placeholder="28-2")
+            f_sub_dong = st.text_input("번지 뒤 '동' (없으면 0)", value="0")
+            st.markdown("---")
+            f_deposit = st.text_input("보증금 (만원)")
+            f_rent = st.text_input("월세 (만원)")
         with col2:
             f_gu = st.text_input("구/군", "송파구")
-            f_room = st.text_input("호실 (숫자만)", placeholder="예: 101")
-            f_name = st.text_input("임대인 성함")
-            f_birth = st.text_input("생년월일 (숫자만)", placeholder="예: 940101")
-            f_phone = st.text_input("연락처 (숫자만)", placeholder="예: 01012345678")
+            f_room = st.text_input("호실 * (숫자만)", placeholder="101")
+            f_name = st.text_input("임대인 성함 *")
+            f_birth = st.text_input("생년월일 * (숫자만)", placeholder="940101")
+            f_phone = st.text_input("연락처 * (숫자만)", placeholder="01012345678")
+            st.markdown("---")
+            f_end_date = st.text_input("현 임대차 만기일", placeholder="2026-05-30")
         f_memo = st.text_area("특이사항")
         
-        if st.form_submit_button("💾 데이터 검증 및 등록", type="primary", use_container_width=True):
-            # 데이터 정제
-            clean_b = clean_bunji(f_bunji)
-            clean_r = clean_numeric(f_room)
-            clean_bi = clean_numeric(f_birth)
-            clean_p = format_phone(f_phone)
-            
-            if not f_dong or not clean_b or not f_name:
-                st.warning("동, 번지, 성함은 필수입니다.")
+        if st.form_submit_button("💾 데이터 검증 및 매물 등록", type="primary", use_container_width=True):
+            if not f_room.isdigit() or not f_birth.isdigit() or not f_phone.isdigit():
+                st.error("⚠️ 호실, 생년월일, 연락처는 오직 '숫자'만 입력 가능합니다.")
+            elif not f_dong or not f_bunji or not f_name:
+                st.warning("⚠️ 필수 항목(*)을 모두 입력해주세요.")
             else:
-                full_addr = f"{f_city} {f_gu} {f_dong} {clean_b}"
-                # 💡 요청사항: 호실 앞에 '동' 표시 (없으면 0)
-                room_display = f"{f_sub_dong}동 {clean_r}호" if f_sub_dong != "0" else f"{clean_r}호"
-                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                full_addr = f"{f_city} {f_gu} {f_dong} {clean_bunji(f_bunji)}"
+                room_final = f"{f_sub_dong}동 {f_room}호" if f_sub_dong != "0" else f"{f_room}호"
                 
-                new_data = [full_addr, room_display, f_name, clean_bi, clean_p, "", "", "", "", "", f_memo, now, user_name, "정상"]
-                ws_data.append_row(new_data)
-                st.success(f"✅ 등록 완료! 번지({clean_b}), 호실({clean_r}), 연락처({clean_p}) 정제됨.")
+                # 💡 중복 등록 방지: (동일 주소 + 동일 호실 + 동일 등록자) 일 경우만 차단
+                duplicate = [r for r in all_records if len(r) > 12 and r[0] == full_addr and r[1] == room_final and r[12] == user_name]
+                if duplicate:
+                    st.error(f"❌ 이미 {user_name}님이 등록하신 매물입니다! (타 직원의 매물은 누적 등록 가능)")
+                else:
+                    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    new_row = [full_addr, room_final, f_name, f_birth, format_phone(f_phone), f_deposit, f_rent, f_end_date, "", "", f_memo, now, user_name, "정상"]
+                    ws_data.append_row(new_row)
+                    update_token(1) # 토큰 1개 지급
+                    st.success("✅ 매물이 성공적으로 등록되었습니다! 열람 포인트 +1 획득! 💰")
 
-# --- [탭 4] 관리자 전용 (🚨 직원 추가/삭제 기능) ---
+# --- [탭 4] 관리자 전용 ---
 if user_email == ADMIN_EMAIL:
     with tabs[3]:
-        st.subheader("👑 직원 명단 관리")
+        st.subheader("👑 직원 관리 및 수정 요청 현황")
         
-        # 1. 직원 추가 폼
-        with st.expander("➕ 신규 직원 등록", expanded=False):
-            new_email = st.text_input("직원 구글 이메일")
-            new_name = st.text_input("직원 이름")
-            if st.button("직원 추가하기"):
-                if "@" in new_email and new_name:
-                    ws_staff.append_row([new_email, new_name, datetime.now().strftime('%Y-%m-%d')])
-                    st.success("직원이 추가되었습니다! (새로고침 후 반영)")
-                    st.rerun()
-        
-        # 2. 현재 직원 목록 및 삭제
-        st.write("### 현재 승인된 직원")
-        staff_data = ws_staff.get_all_records()
-        if staff_data:
-            df_staff = pd.DataFrame(staff_data)
-            st.table(df_staff)
+        # 1. 수정 요청 확인 대시보드
+        st.write("#### 🚨 직원 수정 요청 알림")
+        req_records = ws_request.get_all_records()
+        pending_req = [r for r in req_records if r['처리상태'] == '대기중']
+        if pending_req:
+            st.warning(f"처리 대기 중인 수정 요청이 {len(pending_req)}건 있습니다. 구글 시트의 '수정요청' 탭을 확인하세요.")
+            st.dataframe(pd.DataFrame(pending_req), use_container_width=True)
+        else:
+            st.info("현재 대기 중인 수정 요청이 없습니다.")
             
-            del_email = st.selectbox("삭제할 이메일 선택", ["선택안함"] + [s['이메일'] for s in staff_data])
-            if st.button("선택한 직원 권한 삭제", type="secondary"):
-                if del_email != "선택안함":
-                    cell = ws_staff.find(del_email)
-                    ws_staff.delete_rows(cell.row)
-                    st.warning("삭제되었습니다.")
-                    st.rerun()
-        
-        # 3. 포인트 랭킹 (기존 로직)
         st.write("---")
-        st.subheader("🏆 등록 포인트 랭킹")
-        registrars = [r[12] for r in ws_data.get_all_values()[1:] if len(r) > 12]
-        counts = Counter(registrars)
-        if counts:
-            df_p = pd.DataFrame(counts.items(), columns=["이름", "포인트"]).sort_values("포인트", ascending=False)
-            st.dataframe(df_p, use_container_width=True)
+        
+        # 2. 직원 권한 및 토큰 관리
+        st.write("#### 👥 직원 토큰 및 권한 관리")
+        with st.expander("➕ 신규 직원 등록 및 초기 토큰 지급", expanded=False):
+            new_email = st.text_input("구글 이메일")
+            new_n = st.text_input("직원 실명 (예: 김소장)")
+            start_token = st.number_input("초기 지급 토큰 수", value=10, step=1)
+            if st.button("직원 권한 부여"):
+                if "@" in new_email and new_n:
+                    ws_staff.append_row([new_email, new_n, datetime.now().strftime('%Y-%m-%d'), start_token])
+                    st.success(f"{new_n}님이 추가되었습니다! (새로고침 시 반영)")
+                    st.cache_resource.clear()
+                    st.rerun()
+                    
+        if staff_records:
+            st.dataframe(pd.DataFrame(staff_records), use_container_width=True)

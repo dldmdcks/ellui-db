@@ -1,8 +1,10 @@
 import streamlit as st
 import gspread
+from google.oauth2.credentials import Credentials
 from datetime import datetime
 import json
 import requests
+import urllib.parse
 import os
 
 # 1. 웹사이트 기본 설정
@@ -21,19 +23,27 @@ except Exception as e:
     st.error("❌ 금고 설정 에러를 확인해주세요.")
     st.stop()
 
-# 3. 로그인 URL 생성 함수
+# 3. 로그인 URL 생성 함수 (🚨 구글 시트 접근 권한 요청 추가!)
 def get_login_url():
-    return f"https://accounts.google.com/o/oauth2/v2/auth?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=openid%20email%20profile"
+    scopes = "openid email profile https://www.googleapis.com/auth/spreadsheets"
+    params = {
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": scopes,
+        "access_type": "offline",
+        "prompt": "consent"
+    }
+    return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
 
 # 4. 로그인 상태 확인 (세션)
 if 'connected' not in st.session_state:
     st.session_state.connected = False
 
-# 5. 구글 로그인 결과(code) 처리
+# 5. 구글 로그인 결과 처리 (토큰 저장)
 query_params = st.query_params
 if "code" in query_params and not st.session_state.connected:
     code = query_params["code"]
-    # 구글에 토큰(입장권) 요청
     token_url = "https://oauth2.googleapis.com/token"
     data = {
         "code": code,
@@ -46,7 +56,9 @@ if "code" in query_params and not st.session_state.connected:
     tokens = response.json()
     
     if "access_token" in tokens:
-        # 유저 정보 가져오기
+        # 🚨 여기서 로그인한 사람의 '입장권(토큰)'을 저장합니다!
+        st.session_state.access_token = tokens["access_token"]
+        
         userinfo_url = "https://www.googleapis.com/oauth2/v2/userinfo"
         headers = {"Authorization": f"Bearer {tokens['access_token']}"}
         user_response = requests.get(userinfo_url, headers=headers)
@@ -55,16 +67,13 @@ if "code" in query_params and not st.session_state.connected:
         st.session_state.connected = True
         st.session_state.user_info = user_info
         
-        # 주소창 깔끔하게 정리 후 새로고침
         st.query_params.clear()
         st.rerun()
 
-# 6. 로그인 전 화면 (버튼 표시)
+# 6. 로그인 전 화면
 if not st.session_state.connected:
     st.warning("🔒 보안 구역입니다. 엘루이 매물관리 시스템을 이용하시려면 본인인증이 필요합니다.")
     login_url = get_login_url()
-    
-    # 🚨 [핵심 해결] 억지 HTML을 버리고 스트림릿 공식 링크 버튼을 사용합니다! (새 탭에서 열림)
     st.link_button("🔵 Google 계정으로 로그인", login_url, type="primary", use_container_width=True)
     st.stop()
 
@@ -87,27 +96,23 @@ if st.sidebar.button("로그아웃"):
 
 st.title("🏠 엘루이 매물관리 어시스턴트")
 
-# 구글 시트 연결을 위한 임시 파일 생성
-if not os.path.exists('credentials.json'):
-    with open('credentials.json', 'w', encoding='utf-8') as f:
-        f.write(st.secrets["credentials_json"])
-
-@st.cache_resource
-def init_connection():
-    gc = gspread.oauth(credentials_filename='credentials.json')
+# 🚨 로봇 직원 없이, 방금 로그인한 대표님의 권한으로 시트에 직접 연결합니다!
+def get_worksheet():
+    creds = Credentials(token=st.session_state.access_token)
+    gc = gspread.authorize(creds)
     sheet_id = '121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA'
     return gc.open_by_key(sheet_id).sheet1
 
 try:
-    worksheet = init_connection()
+    worksheet = get_worksheet()
 except Exception as e:
-    st.error(f"⚠️ 구글 시트 연결 대기중 (정상입니다): {e}")
+    st.error("⚠️ 구글 시트 접근 권한이 필요합니다. 로그아웃 후 다시 로그인하면서 'Google 스프레드시트' 권한을 허용해주세요!")
     st.stop()
 
 def load_data():
     return worksheet.get_all_values()[1:]
 
-# 메인 탭 기능 
+# 메인 탭 기능 (검색 및 등록)
 tab1, tab2, tab3 = st.tabs(["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"])
 
 with tab1:

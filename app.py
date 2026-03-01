@@ -64,14 +64,8 @@ if not st.session_state.connected:
     st.warning("🔒 보안 구역입니다. 엘루이 매물관리 시스템을 이용하시려면 본인인증이 필요합니다.")
     login_url = get_login_url()
     
-    # 🚨 [핵심 해결] 링크(a) 안에 버튼(button)을 넣지 않고, 링크 자체를 버튼 모양으로 꾸몄습니다!
-    st.markdown(f'''
-        <div style="display: flex; justify-content: center; margin-top: 20px;">
-            <a href="{login_url}" target="_top" style="background-color: #4285F4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                🔵 Google 계정으로 로그인
-            </a>
-        </div>
-    ''', unsafe_allow_html=True)
+    # 🚨 [핵심 해결] 억지 HTML을 버리고 스트림릿 공식 링크 버튼을 사용합니다! (새 탭에서 열림)
+    st.link_button("🔵 Google 계정으로 로그인", login_url, type="primary", use_container_width=True)
     st.stop()
 
 # ==========================================

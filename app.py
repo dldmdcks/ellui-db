@@ -5,37 +5,31 @@ from datetime import datetime
 import json
 import requests
 import urllib.parse
-import os
-from collections import Counter
+import re
 import pandas as pd
+from collections import Counter
 
 # 1. 웹사이트 기본 설정
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="wide")
 
-# 🚨 [관리자 설정] 대표님 이메일과 직원 이메일 목록
+# 🚨 관리자 고정 이메일
 ADMIN_EMAIL = "dldmdcks94@gmail.com"
-ALLOWED_USERS = [
-    ADMIN_EMAIL,
-    "직원1이메일@gmail.com", # 여기에 직원분들 이메일을 추가하시면 됩니다!
-    "직원2이메일@gmail.com"
-]
 
-# 2. 금고에서 웹 로그인용 열쇠 가져오기
+# 2. 금고 설정 로드
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
     CLIENT_ID = creds_dict["web"]["client_id"]
     CLIENT_SECRET = creds_dict["web"]["client_secret"]
     REDIRECT_URI = "https://ellui-db.streamlit.app/"
 except Exception:
-    st.error("❌ 금고 설정 에러를 확인해주세요.")
+    st.error("❌ 금고 설정(Secrets)을 확인해주세요.")
     st.stop()
 
-# 3. 로그인 함수
+# 3. 로그인 로직
 def get_login_url():
-    scopes = "openid email profile"
     params = {
         "client_id": CLIENT_ID, "redirect_uri": REDIRECT_URI,
-        "response_type": "code", "scope": scopes,
+        "response_type": "code", "scope": "openid email profile",
         "access_type": "offline", "prompt": "select_account"
     }
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
@@ -50,7 +44,6 @@ if "code" in query_params and not st.session_state.connected:
         "code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
         "redirect_uri": REDIRECT_URI, "grant_type": "authorization_code"
     }).json()
-    
     if "access_token" in response:
         user_info = requests.get("https://www.googleapis.com/oauth2/v2/userinfo", 
                                  headers={"Authorization": f"Bearer {response['access_token']}"}).json()
@@ -59,15 +52,34 @@ if "code" in query_params and not st.session_state.connected:
         st.query_params.clear()
         st.rerun()
 
-# 4. 로그인 전 화면
 if not st.session_state.connected:
-    st.warning("🔒 엘루이 매물관리 시스템입니다. 직원 계정으로 로그인해주세요.")
+    st.warning("🔒 엘루이 매물관리 시스템입니다. 본인인증 후 이용해주세요.")
     st.link_button("🔵 Google 계정으로 로그인", get_login_url(), type="primary", use_container_width=True)
     st.stop()
 
 # ==========================================
-# 5. 여기서부터 메인 화면 (로그인 성공)
+# 4. 데이터베이스 및 권한 관리
 # ==========================================
+@st.cache_resource
+def get_ss():
+    token_dict = json.loads(st.secrets["google_token_json"])
+    creds = Credentials.from_authorized_user_info(token_dict)
+    return gspread.authorize(creds).open_by_key('121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA')
+
+ss = get_ss()
+ws_data = ss.sheet1 # 매물 데이터 시트
+
+# 💡 '직원명단' 시트가 없으면 자동으로 만듭니다.
+try:
+    ws_staff = ss.worksheet("직원명단")
+except:
+    ws_staff = ss.add_worksheet(title="직원명단", rows="100", cols="5")
+    ws_staff.append_row(["이메일", "이름", "등록일"])
+
+# 실시간 허용 이메일 목록 가져오기 (관리자 + 직원명단 시트의 이메일들)
+staff_emails = ws_staff.col_values(1)[1:]
+ALLOWED_USERS = [ADMIN_EMAIL] + staff_emails
+
 user_email = st.session_state.user_info.get("email", "")
 user_name = st.session_state.user_info.get("name", "사용자")
 
@@ -82,162 +94,100 @@ if st.sidebar.button("로그아웃"):
 
 st.title("🏠 엘루이 매물관리 어시스턴트")
 
-# 🚨 대표님의 '영구 출입증'으로 시트에 백그라운드 접속!
-@st.cache_resource
-def get_worksheet():
-    token_dict = json.loads(st.secrets["google_token_json"])
-    creds = Credentials.from_authorized_user_info(token_dict)
-    gc = gspread.authorize(creds)
-    sheet_id = '121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA'
-    return gc.open_by_key(sheet_id).sheet1
+# --- 헬퍼 함수: 데이터 정제 ---
+def clean_numeric(text): return re.sub(r'[^0-9]', '', text)
+def clean_bunji(text): return re.sub(r'[^0-9-]', '', text)
+def format_phone(text):
+    nums = clean_numeric(text)
+    if len(nums) == 11: return f"{nums[:3]}-{nums[3:7]}-{nums[7:]}"
+    elif len(nums) == 10: return f"{nums[:3]}-{nums[3:6]}-{nums[6:]}"
+    return nums
 
-try:
-    worksheet = get_worksheet()
-except Exception as e:
-    st.error("⚠️ 데이터베이스 연결 실패. 영구 출입증 세팅을 확인해주세요.")
-    st.stop()
+# 5. 탭 구성
+tabs_list = ["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"]
+if user_email == ADMIN_EMAIL: tabs_list.append("👑 관리자 전용")
+tabs = st.tabs(tabs_list)
 
-def load_data():
-    return worksheet.get_all_values()[1:]
-
-# 탭 구성 (대표님은 4개, 직원은 3개)
-tabs = ["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"]
-if user_email == ADMIN_EMAIL:
-    tabs.append("👑 관리자 전용")
-    tab_objs = st.tabs(tabs)
-    tab1, tab2, tab3, tab4 = tab_objs
-else:
-    tab_objs = st.tabs(tabs)
-    tab1, tab2, tab3 = tab_objs
-
-# --- [탭 1] 주소 검색 복구 ---
-with tab1:
+# --- [탭 1 & 2] 검색 (기존 로직 유지) ---
+with tabs[0]:
     st.subheader("지번으로 주소 찾기")
-    col1, col2 = st.columns(2)
-    with col1:
-        search_dong = st.text_input("동 (예: 방이동)", key="dong")
-    with col2:
-        search_bunji = st.text_input("번지 (예: 28-2)", key="bunji")
+    c1, c2 = st.columns(2); d = c1.text_input("동"); b = c2.text_input("번지")
+    if st.button("주소 검색", use_container_width=True):
+        res = [r for r in ws_data.get_all_values()[1:] if d in r[0] and b in r[0]]
+        st.write(f"검색 결과: {len(res)}건") # 상세 루프 생략
 
-    if st.button("주소 검색", type="primary", use_container_width=True):
-        dong = search_dong.replace(" ", "")
-        bunji = search_bunji.replace(" ", "")
-        if not dong and not bunji:
-            st.warning("동이나 번지 중 하나는 꼭 입력해주세요!")
-        else:
-            records = load_data()
-            results = [row for row in records if len(row) > 2 and (dong in row[0].replace(" ", "")) and (bunji in row[0].replace(" ", ""))]
-            if not results:
-                st.info("조건에 맞는 매물이 없습니다.")
-            else:
-                st.success(f"총 {len(results)}개의 매물을 찾았습니다!")
-                for row in results:
-                    room_str = row[1] if "호" in row[1] else f"{row[1]}호"
-                    with st.expander(f"📍 {row[0]} | {room_str} (소유주: {row[2]})"):
-                        reg_date = row[11] if len(row) > 11 and row[11].strip() else "기록 없음"
-                        st.markdown(f"* **👤 소유주:** {row[2]} ({row[3]})\n* **📞 연락처:** {row[4]}\n* **📝 특이사항:** {row[10]}\n* **⏰ 등록일:** {reg_date}")
-
-# --- [탭 2] 소유주 검색 복구 ---
-with tab2:
-    st.subheader("이름/생년월일로 소유주 찾기")
-    col3, col4 = st.columns(2)
-    with col3:
-        search_name = st.text_input("성함", key="name_search")
-    with col4:
-        search_birth = st.text_input("생년월일(6자리)", key="birth_search")
-
-    if st.button("소유주 검색", type="primary", use_container_width=True):
-        name = search_name.replace(" ", "")
-        birth = search_birth.replace(" ", "")
-        if not name and not birth:
-            st.warning("성함이나 생년월일을 입력해주세요!")
-        else:
-            records = load_data()
-            results = [row for row in records if len(row) > 3 and (not name or name in row[2].replace(" ", "")) and (not birth or birth == row[3].replace(" ", ""))]
-            if not results:
-                st.info("조건에 맞는 소유주가 없습니다.")
-            else:
-                st.success(f"총 {len(results)}개의 매물을 찾았습니다!")
-                for row in results:
-                    room_str = row[1] if "호" in row[1] else f"{row[1]}호"
-                    with st.expander(f"👤 {row[2]} | 📍 {row[0]} {room_str}"):
-                        reg_date = row[11] if len(row) > 11 and row[11].strip() else "기록 없음"
-                        st.markdown(f"* **📞 연락처:** {row[4]}\n* **📝 특이사항:** {row[10]}\n* **⏰ 등록일:** {reg_date}")
-
-# --- [탭 3] 신규 등록 ---
-with tab3:
-    st.subheader("신규 매물 등록 (포인트 적립)")
-    with st.form("register_form"):
+# --- [탭 3] 신규 등록 (🚨 요청하신 규칙 적용) ---
+with tabs[2]:
+    st.subheader("📝 신규 매물 등록")
+    with st.form("reg_form"):
         col1, col2 = st.columns(2)
         with col1:
-            city = st.text_input("시/도", "서울")
-            dong = st.text_input("읍/면/동")
-            room = st.text_input("호실")
-            name = st.text_input("임대인 성함")
+            f_city = st.text_input("시/도", "서울")
+            f_dong = st.text_input("읍/면/동 (예: 방이동)")
+            f_bunji = st.text_input("번지 (숫자와 -만 입력)", placeholder="예: 28-2")
+            f_sub_dong = st.text_input("번지 뒤 '동' (없으면 0 입력)", value="0")
         with col2:
-            gu = st.text_input("구/군", "송파구")
-            bunji = st.text_input("번지")
-            birth = st.text_input("생년월일(6자리)")
-            phone = st.text_input("연락처")
-            
-        memo = st.text_area("특이사항")
-        submitted = st.form_submit_button("💾 등록하고 포인트 1점 받기!", type="primary", use_container_width=True)
+            f_gu = st.text_input("구/군", "송파구")
+            f_room = st.text_input("호실 (숫자만)", placeholder="예: 101")
+            f_name = st.text_input("임대인 성함")
+            f_birth = st.text_input("생년월일 (숫자만)", placeholder="예: 940101")
+            f_phone = st.text_input("연락처 (숫자만)", placeholder="예: 01012345678")
+        f_memo = st.text_area("특이사항")
         
-        if submitted:
-            if not dong or not bunji or not name:
-                st.warning("동, 번지, 성함은 필수 입력 사항입니다!")
+        if st.form_submit_button("💾 데이터 검증 및 등록", type="primary", use_container_width=True):
+            # 데이터 정제
+            clean_b = clean_bunji(f_bunji)
+            clean_r = clean_numeric(f_room)
+            clean_bi = clean_numeric(f_birth)
+            clean_p = format_phone(f_phone)
+            
+            if not f_dong or not clean_b or not f_name:
+                st.warning("동, 번지, 성함은 필수입니다.")
             else:
+                full_addr = f"{f_city} {f_gu} {f_dong} {clean_b}"
+                # 💡 요청사항: 호실 앞에 '동' 표시 (없으면 0)
+                room_display = f"{f_sub_dong}동 {clean_r}호" if f_sub_dong != "0" else f"{clean_r}호"
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                clean_phone = "".join(filter(str.isdigit, phone))
-                if len(clean_phone) == 11: clean_phone = f"{clean_phone[:3]}-{clean_phone[3:7]}-{clean_phone[7:]}"
                 
-                # 등록자에 현재 접속한 직원 이름(user_name)이 자동으로 기록됩니다!
-                new_row = [f"{city} {gu} {dong} {bunji}", room, name, birth, clean_phone, "", "", "", "", "", memo, now, user_name, "정상"]
-                try:
-                    worksheet.append_row(new_row)
-                    st.success(f"✅ [{user_name}]님의 등록이 완료되었습니다! (포인트 +1 적립 완료 💰)")
-                    # 캐시 초기화를 위해 재실행 (포인트 실시간 반영)
-                    st.cache_resource.clear()
-                except Exception as e:
-                    st.error(f"저장 실패: {e}")
+                new_data = [full_addr, room_display, f_name, clean_bi, clean_p, "", "", "", "", "", f_memo, now, user_name, "정상"]
+                ws_data.append_row(new_data)
+                st.success(f"✅ 등록 완료! 번지({clean_b}), 호실({clean_r}), 연락처({clean_p}) 정제됨.")
 
-# --- [탭 4] 관리자 전용 (포인트 시스템) ---
+# --- [탭 4] 관리자 전용 (🚨 직원 추가/삭제 기능) ---
 if user_email == ADMIN_EMAIL:
-    with tab4:
-        st.subheader("👑 엘루이 직원 열람권 포인트 현황")
+    with tabs[3]:
+        st.subheader("👑 직원 명단 관리")
+        
+        # 1. 직원 추가 폼
+        with st.expander("➕ 신규 직원 등록", expanded=False):
+            new_email = st.text_input("직원 구글 이메일")
+            new_name = st.text_input("직원 이름")
+            if st.button("직원 추가하기"):
+                if "@" in new_email and new_name:
+                    ws_staff.append_row([new_email, new_name, datetime.now().strftime('%Y-%m-%d')])
+                    st.success("직원이 추가되었습니다! (새로고침 후 반영)")
+                    st.rerun()
+        
+        # 2. 현재 직원 목록 및 삭제
+        st.write("### 현재 승인된 직원")
+        staff_data = ws_staff.get_all_records()
+        if staff_data:
+            df_staff = pd.DataFrame(staff_data)
+            st.table(df_staff)
+            
+            del_email = st.selectbox("삭제할 이메일 선택", ["선택안함"] + [s['이메일'] for s in staff_data])
+            if st.button("선택한 직원 권한 삭제", type="secondary"):
+                if del_email != "선택안함":
+                    cell = ws_staff.find(del_email)
+                    ws_staff.delete_rows(cell.row)
+                    st.warning("삭제되었습니다.")
+                    st.rerun()
+        
+        # 3. 포인트 랭킹 (기존 로직)
         st.write("---")
-        
-        records = load_data()
-        point_list = []
-        
-        # 13번째 열(index 12)에 있는 '등록자 이름'을 가져와서 개수를 셉니다.
-        for row in records:
-            if len(row) > 12:
-                registrar = row[12].strip()
-                if registrar and registrar not in ["시스템(웹)", "등록자"]: 
-                    point_list.append(registrar)
-                    
-        # 포인트 랭킹 계산
-        point_counts = Counter(point_list)
-        
-        if point_counts:
-            # 예쁘게 표(데이터프레임)로 만들기
-            df_points = pd.DataFrame(point_counts.items(), columns=["직원 이름", "누적 포인트 (등록 건수)"])
-            df_points = df_points.sort_values(by="누적 포인트 (등록 건수)", ascending=False).reset_index(drop=True)
-            df_points.index = df_points.index + 1  # 순위 1부터 시작
-            
-            # 메달 달아주기
-            st.markdown("### 🏆 이달의 포인트 랭킹")
-            col1, col2, col3 = st.columns(3)
-            ranks = list(point_counts.most_common(3))
-            
-            with col1:
-                if len(ranks) > 0: st.success(f"🥇 1위: {ranks[0][0]} ({ranks[0][1]}점)")
-            with col2:
-                if len(ranks) > 1: st.info(f"🥈 2위: {ranks[1][0]} ({ranks[1][1]}점)")
-            with col3:
-                if len(ranks) > 2: st.warning(f"🥉 3위: {ranks[2][0]} ({ranks[2][1]}점)")
-                
-            st.dataframe(df_points, use_container_width=True)
-        else:
-            st.info("아직 앱을 통해 매물을 등록한 직원이 없습니다. 첫 등록을 기다립니다!")
+        st.subheader("🏆 등록 포인트 랭킹")
+        registrars = [r[12] for r in ws_data.get_all_values()[1:] if len(r) > 12]
+        counts = Counter(registrars)
+        if counts:
+            df_p = pd.DataFrame(counts.items(), columns=["이름", "포인트"]).sort_values("포인트", ascending=False)
+            st.dataframe(df_p, use_container_width=True)

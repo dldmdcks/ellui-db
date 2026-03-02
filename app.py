@@ -12,6 +12,13 @@ import pandas as pd
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="wide")
 ADMIN_EMAIL = "dldmdcks94@gmail.com"
 
+# --- 💡 전담 관리 건물 세팅 (팀장 보호용) ---
+MANAGER_BUILDINGS = {
+    "엘루이시티": "곽태근 대표",
+    "마이챔버": "이응찬 팀장",
+    "제니알": "선미 팀장"
+}
+
 # 2. 로그인 및 DB 연결 설정
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
@@ -23,7 +30,7 @@ except Exception:
     st.error("❌ 금고 설정(Secrets)을 확인해주세요.")
     st.stop()
 
-# --- 💡 새로고침(F5) 로그아웃 방지 로직 ---
+# 새로고침(F5) 로그아웃 방지 로직
 if 'connected' not in st.session_state: 
     st.session_state.connected = False
 
@@ -50,7 +57,6 @@ if "code" in query_params and not st.session_state.connected:
                                  headers={"Authorization": f"Bearer {access_token}"}).json()
         st.session_state.connected = True
         st.session_state.user_info = user_info
-        # 주소창에 토큰을 심어서 새로고침 시 유지되도록 함
         st.query_params["session_token"] = access_token
         st.rerun()
 
@@ -69,7 +75,7 @@ def get_ss():
 ss = get_ss()
 ws_data = ss.sheet1
 
-# 직원명단 / 수정요청 / 토큰내역 시트 자동 생성
+# 직원명단 / 수정요청 / 토큰내역 시트 확인
 try: ws_staff = ss.worksheet("직원명단")
 except: 
     ws_staff = ss.add_worksheet(title="직원명단", rows="100", cols="5")
@@ -95,7 +101,7 @@ if user_email not in ALLOWED_USERS:
     st.error(f"⚠️ 승인되지 않은 계정입니다 ({user_email}). 대표님께 권한을 요청하세요.")
     st.stop()
 
-# 💡 실시간 토큰 동기화 완벽 수정 (세션 기억 삭제, 무조건 원본 읽기)
+# 실시간 토큰 동기화
 if user_email == ADMIN_EMAIL:
     user_name, user_tokens, staff_row_index = "이응찬 대표", 9999, None
 else:
@@ -105,16 +111,34 @@ else:
 
 history_records = ws_history.get_all_values()[1:]
 
-# --- 헬퍼 함수 ---
-def clean_numeric(text): return re.sub(r'[^0-9]', '', text)
-def clean_bunji(text): return re.sub(r'[^0-9-]', '', text)
+# --- 헬퍼 함수 모음 ---
+def clean_numeric(text): return re.sub(r'[^0-9]', '', str(text))
+def clean_bunji(text): return re.sub(r'[^0-9-]', '', str(text))
 def format_phone(text):
     nums = clean_numeric(text)
     if len(nums) == 11: return f"{nums[:3]}-{nums[3:7]}-{nums[7:]}"
     elif len(nums) == 10: return f"{nums[:3]}-{nums[3:6]}-{nums[6:]}"
     return nums
 
-# 토큰 업데이트 및 내역 기록 함수 (세션 동기화 로직 제거 완료)
+# 💡 해시태그(특이사항) 추출기
+def extract_tags(memo):
+    tags = []
+    if not memo: return ""
+    m = str(memo).strip()
+    if any(k in m for k in ["애완", "반려", "강아지", "고양이"]): tags.append("🐶 애완가능")
+    if "주차" in m: tags.append("🚗 주차")
+    if "전입" in m: tags.append("✅ 전입가능")
+    if "대출" in m: tags.append("🏦 대출가능")
+    if "사업자" in m: tags.append("🏢 사업자")
+    return " ".join(tags)
+
+# 💡 전담 건물 태그 추출기
+def get_manager_tag(addr):
+    for b_name, manager in MANAGER_BUILDINGS.items():
+        if b_name in str(addr):
+            return f" 👑[{manager} 전담]"
+    return ""
+
 def update_token(amount, reason):
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     new_token_val = user_tokens + amount
@@ -123,7 +147,6 @@ def update_token(amount, reason):
     ws_history.append_row([now, user_name, amount, new_token_val, reason])
     st.cache_resource.clear()
 
-# 24시간 이내 열람 여부 확인 로직
 def is_unlocked_recently(addr, room):
     if user_email == ADMIN_EMAIL: return True
     now = datetime.now()
@@ -132,30 +155,37 @@ def is_unlocked_recently(addr, room):
         if len(r) > 4 and r[1] == user_name and search_str in r[4] and str(r[2]) == "-1":
             try:
                 record_time = datetime.strptime(r[0], '%Y-%m-%d %H:%M:%S')
-                if (now - record_time).total_seconds() <= 86400: # 24시간 = 86400초
+                if (now - record_time).total_seconds() <= 86400:
                     return True
             except: continue
     return False
 
-# 대기중인 요청 데이터 확보 (인덱스 포함)
+# --- 💡 메인 DB 가져오기 & 최신 데이터 필터링(중복 제거) ---
 req_all_values = ws_request.get_all_values()
 pending_reqs_with_idx = [(i+1, r) for i, r in enumerate(req_all_values) if i > 0 and len(r) > 5 and r[5] == '대기중']
 pending_req_count = len(pending_reqs_with_idx)
 
-# 메인 DB 가져오기 및 비공개 필터링 (V5 핵심)
 all_records_raw = ws_data.get_all_values()[1:]
-all_records = []
-for r in all_records_raw:
-    if len(r) > 12:
-        status = r[13].strip() if len(r) > 13 else "정상"
-        # 직원은 '비공개' 매물 아예 못 보게 숨김
-        if user_email != ADMIN_EMAIL and status == "비공개":
-            continue
-        r_padded = (r + [""]*14)[:14]
-        if not r_padded[13]: r_padded[13] = "정상"
-        all_records.append(r_padded)
+temp_dict = {}
+
+# 위에서 아래로 읽으며 딕셔너리에 덮어쓰기 -> 자연스럽게 최신 데이터만 남음
+for i, r in enumerate(all_records_raw):
+    row_idx = i + 2 # 실제 시트의 행 번호 (업데이트용)
+    status = r[13].strip() if len(r) > 13 else "정상"
+    
+    if user_email != ADMIN_EMAIL and status == "비공개":
+        continue
         
-all_records.reverse() # 최신순 정렬
+    r_padded = (r + [""]*14)[:14]
+    if not r_padded[13]: r_padded[13] = "정상"
+    r_padded.append(row_idx) # 인덱스 14에 행 번호 몰래 저장
+    
+    # 중복 판단 기준: 주소 + 호실 + 성함 + 연락처
+    key = (str(r_padded[0]).replace(" ",""), str(r_padded[1]).replace(" ",""), str(r_padded[2]), str(r_padded[4]))
+    temp_dict[key] = r_padded 
+
+all_records = list(temp_dict.values())
+all_records.reverse() # 최신순 정렬 (화면 표시용)
 
 # --- 사이드바 ---
 st.sidebar.markdown(f"### 👤 접속자: {user_name}")
@@ -169,7 +199,6 @@ with st.sidebar.expander("📜 내 토큰 이용 내역 보기"):
     else:
         st.write("내역이 없습니다.")
 
-# 포상 안내 문구 추가
 st.sidebar.caption("🎁 우수 DB 정화 직원에겐 대표님의 특별 토큰이 수시로 지급됩니다.")
 st.sidebar.write("---")
 
@@ -182,7 +211,6 @@ if st.sidebar.button("로그아웃"):
     st.session_state.clear()
     st.rerun()
 
-# --- 검색 결과 세션 유지 (화면 튕김 방지) ---
 if "addr_search_res" not in st.session_state: st.session_state.addr_search_res = None
 if "owner_search_res" not in st.session_state: st.session_state.owner_search_res = None
 
@@ -192,38 +220,76 @@ tabs = st.tabs(tabs_list)
 
 # --- [탭 1] 주소 검색 ---
 with tabs[0]:
-    st.subheader("지번으로 주소 찾기 (상세조회 시 토큰 1개 차감)")
-    c1, c2 = st.columns(2); d = c1.text_input("동 (예: 방이동)", key="t1_dong"); b = c2.text_input("번지 (예: 28-2)", key="t1_bunji")
+    st.subheader("지번 및 호실로 매물 찾기")
+    
+    # 💡 이중 검색창 구현 (호실 추가)
+    c1, c2, c3 = st.columns([2, 2, 1])
+    d = c1.text_input("동/건물명 (예: 방이동, 엘루이)", key="t1_dong")
+    b = c2.text_input("번지 (예: 28-2)", key="t1_bunji")
+    r_search = c3.text_input("호실 (예: 1019)", key="t1_room")
     
     if st.button("주소 검색", use_container_width=True, type="primary"):
-        st.session_state.addr_search_res = [r for r in all_records if len(r) > 12 and (d.replace(" ","") in r[0].replace(" ","")) and (b.replace(" ","") in r[0].replace(" ",""))]
+        st.session_state.addr_search_res = [
+            r for r in all_records 
+            if (d.replace(" ","") in r[0].replace(" ","")) 
+            and (b.replace(" ","") in r[0].replace(" ",""))
+            and (r_search in r[1])
+        ]
     
     if st.session_state.addr_search_res is not None:
-        st.success(f"검색 결과: 최신순 {len(st.session_state.addr_search_res)}건")
+        st.success(f"검색 결과: 최신순 {len(st.session_state.addr_search_res)}건 (중복 제거됨)")
         for idx, row in enumerate(st.session_state.addr_search_res):
-            addr, room, name, birth, phone, deposit, rent, end_date, _, _, memo, reg_date, registrar, status = (row + [""]*14)[:14]
+            addr, room, name, birth, phone, deposit, rent, end_date, call_date, b_type, memo, reg_date, registrar, status, row_idx = row
             
             with st.container():
-                # 대표님 화면에만 비공개 딱지 보임
-                status_tag = " 🚨[비공개 매물]" if status == "비공개" else ""
-                st.markdown(f"#### 📍 {addr} | {room}{status_tag} | 📅 {reg_date[:10]}")
-                unlock_key = f"unlock_addr_{addr}_{room}"
+                status_tag = " 🚨[비공개]" if status == "비공개" else ""
+                old_tag = " ⚠️[2020년 과거 장부]" if "2020-" in str(reg_date) else ""
+                m_tag = get_manager_tag(addr)
+                hash_tags = extract_tags(memo)
                 
+                st.markdown(f"#### 📍 {addr} | {room}{status_tag}{old_tag}{m_tag}")
+                if hash_tags: st.caption(f"✨ {hash_tags}")
+                
+                unlock_key = f"unlock_addr_{addr}_{room}"
                 free_unlock = is_unlocked_recently(addr, room)
-                is_open = free_unlock or st.session_state.get(unlock_key, False)
+                
+                # 💡 연락처 없음 매물은 무조건 오픈 (토큰 방어)
+                is_no_phone = ("연락처 없음" in str(phone))
+                is_open = free_unlock or st.session_state.get(unlock_key, False) or is_no_phone
                 
                 if is_open:
-                    if free_unlock and not st.session_state.get(unlock_key, False) and user_email != ADMIN_EMAIL:
-                        st.caption("⏳ 최근 24시간 내 열람 기록이 확인되어 토큰 차감 없이 무료로 개방되었습니다.")
-                    st.info(f"**소유주:** {name} ({birth})\n\n**연락처:** {phone}\n\n**보증금/월세:** {deposit}/{rent}\n\n**만기일:** {end_date}\n\n**특이사항:** {memo}")
-                    with st.form(f"edit_addr_{idx}", clear_on_submit=True):
-                        edit_memo = st.text_input("수정 요청 사유 (예: 연락처 변경)", key=f"req_{idx}")
-                        # 꿀팁 안내 문구 추가
-                        st.caption("💡 꿀팁: 변경된 진짜 연락처 등 정확한 정보를 함께 남겨주시면, 대표님이 확인 후 [포상 토큰 +1개]를 즉시 지급해 드립니다!")
-                        if st.form_submit_button("🛠 대표님께 수정 요청하기"):
-                            if edit_memo:
-                                ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, edit_memo, "대기중"])
-                                st.success("요청이 전송되었습니다!")
+                    if free_unlock and not st.session_state.get(unlock_key, False) and user_email != ADMIN_EMAIL and not is_no_phone:
+                        st.caption("⏳ 최근 24시간 내 열람 기록이 확인되어 무료로 개방되었습니다.")
+                    
+                    st.info(f"**소유주:** {name} ({birth})\n\n**연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent}  |  **만기일:** {end_date}\n\n**특이사항:** {memo}")
+                    
+                    # 💡 2020년 데이터 심폐소생 버튼
+                    if "2020-" in str(reg_date):
+                        if st.button("✅ 소유주 확인 완료 (최신 DB로 갱신)", key=f"upd_2020_{idx}"):
+                            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            ws_data.update_cell(row_idx, 12, now_str)
+                            ws_data.update_cell(row_idx, 13, user_name)
+                            st.success("최신 데이터로 갱신되었습니다!")
+                            st.cache_resource.clear()
+                            st.rerun()
+
+                    # 💡 연락처 없음 -> 제보하기 퀘스트 폼
+                    if is_no_phone:
+                        with st.form(f"report_{idx}", clear_on_submit=True):
+                            st.warning("이 매물은 현재 연락처가 비어있습니다.")
+                            new_phone = st.text_input("알아낸 진짜 연락처 입력")
+                            if st.form_submit_button("🏆 연락처 제보하고 대표님께 보상받기!"):
+                                if new_phone:
+                                    ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, f"[연락처 제보] {new_phone}", "대기중"])
+                                    st.success("제보 완료! 확인 후 보상이 지급됩니다.")
+                    else:
+                        with st.form(f"edit_addr_{idx}", clear_on_submit=True):
+                            edit_memo = st.text_input("수정 요청 사유 (예: 연락처 변경)", key=f"req_{idx}")
+                            st.caption("💡 꿀팁: 변경된 진짜 연락처를 남겨주시면 대표님이 [포상 토큰]을 쏩니다!")
+                            if st.form_submit_button("🛠 대표님께 수정 요청하기"):
+                                if edit_memo:
+                                    ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, edit_memo, "대기중"])
+                                    st.success("요청이 전송되었습니다!")
                 else:
                     if st.button(f"🔓 상세 정보 열람 (토큰 1개 차감)", key=f"btn_addr_{idx}"):
                         if user_tokens >= 1:
@@ -236,46 +302,42 @@ with tabs[0]:
 
 # --- [탭 2] 소유주 검색 ---
 with tabs[1]:
-    st.subheader("소유주 매물 검색 (상세조회 시 토큰 1개 차감)")
-    c3, c4 = st.columns(2); sn = c3.text_input("소유주 성함", key="t2_name"); sb = c4.text_input("생년월일(6자리)", key="t2_birth")
+    st.subheader("소유주 매물 검색")
+    c4, c5 = st.columns(2); sn = c4.text_input("소유주 성함", key="t2_name"); sb = c5.text_input("생년월일(6자리)", key="t2_birth")
     
     if st.button("소유주 검색", use_container_width=True, type="primary"):
-        st.session_state.owner_search_res = [r for r in all_records if len(r) > 12 and (sn in r[2]) and (not sb or sb == r[3])]
+        st.session_state.owner_search_res = [r for r in all_records if (sn in r[2]) and (not sb or sb == r[3])]
         
     if st.session_state.owner_search_res is not None:
         st.success(f"검색 결과: 최신순 {len(st.session_state.owner_search_res)}건")
         for idx, row in enumerate(st.session_state.owner_search_res):
-            addr, room, name, birth, phone, deposit, rent, end_date, _, _, memo, reg_date, registrar, status = (row + [""]*14)[:14]
+            addr, room, name, birth, phone, deposit, rent, end_date, _, _, memo, reg_date, registrar, status, row_idx = row
             
             with st.container():
-                status_tag = " 🚨[비공개 매물]" if status == "비공개" else ""
-                st.markdown(f"#### 👤 {name} ({birth}) | 📍 {addr} {room}{status_tag}")
-                unlock_key = f"unlock_own_{addr}_{room}"
+                status_tag = " 🚨[비공개]" if status == "비공개" else ""
+                m_tag = get_manager_tag(addr)
+                st.markdown(f"#### 👤 {name} ({birth}) | 📍 {addr} {room}{status_tag}{m_tag}")
                 
+                unlock_key = f"unlock_own_{addr}_{room}"
+                is_no_phone = ("연락처 없음" in str(phone))
                 free_unlock = is_unlocked_recently(addr, room)
-                is_open = free_unlock or st.session_state.get(unlock_key, False)
+                is_open = free_unlock or st.session_state.get(unlock_key, False) or is_no_phone
                 
                 if is_open:
-                    if free_unlock and not st.session_state.get(unlock_key, False) and user_email != ADMIN_EMAIL:
-                        st.caption("⏳ 최근 24시간 내 열람 기록이 확인되어 토큰 차감 없이 무료로 개방되었습니다.")
                     st.info(f"**연락처:** {phone}  |  **특이사항:** {memo}  |  **만기/보증/월세:** {end_date} / {deposit} / {rent}")
-                    
                     with st.form(f"edit_own_{idx}", clear_on_submit=True):
-                        edit_memo = st.text_input("수정 요청 사유 (예: 번호 오기재)", key=f"req_own_{idx}")
-                        # 꿀팁 안내 문구 추가
-                        st.caption("💡 꿀팁: 변경된 진짜 연락처 등 정확한 정보를 함께 남겨주시면, 대표님이 확인 후 [포상 토큰 +1개]를 즉시 지급해 드립니다!")
-                        if st.form_submit_button("🛠 대표님께 수정 요청하기"):
+                        edit_memo = st.text_input("수정 요청 사유", key=f"req_own_{idx}")
+                        if st.form_submit_button("🛠 대표님께 수정/제보 요청하기"):
                             if edit_memo:
                                 ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, edit_memo, "대기중"])
-                                st.success("요청이 전송되었습니다!")
+                                st.success("요청 완료!")
                 else:
                     if st.button(f"🔓 상세 정보 열람 (토큰 1개 차감)", key=f"btn_own_{idx}"):
                         if user_tokens >= 1:
                             update_token(-1, f"매물 열람 ({addr} {room})")
                             st.session_state[unlock_key] = True
                             st.rerun()
-                        else:
-                            st.error("보유한 열람권(토큰)이 부족합니다.")
+                        else: st.error("토큰이 부족합니다.")
                 st.write("---")
 
 # --- [탭 3] 신규 등록 ---
@@ -310,13 +372,12 @@ with tabs[2]:
                 full_addr = f"{f_city} {f_gu} {f_dong} {clean_bunji(f_bunji)}"
                 room_final = f"{f_sub_dong}동 {f_room}호" if f_sub_dong != "0" else f"{f_room}호"
                 
-                # 중복 차단 완화: 과거에 올렸더라도 '비공개' 상태면 중복 통과 (부활 등록 가능)
                 duplicate = [r for r in all_records if r[0] == full_addr and r[1] == room_final and r[12] == user_name and r[13] != "비공개"]
                 if duplicate:
                     st.error(f"❌ 이미 {user_name}님이 등록하신 매물입니다!")
                 else:
                     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    new_row = [full_addr, room_final, f_name, f_birth, format_phone(f_phone), f_deposit, f_rent, f_end_date, "", "", f_memo, now, user_name, "정상"]
+                    new_row = [full_addr, room_final, f_name, f_birth, format_phone(f_phone), f_deposit, f_rent, f_end_date, "", "미분류", f_memo, now, user_name, "정상"]
                     ws_data.append_row(new_row)
                     update_token(1, f"신규 매물 등록 ({full_addr} {room_final})")
                     st.success("✅ 매물이 성공적으로 등록되었습니다! 열람 포인트 +1 획득! 💰")
@@ -327,7 +388,6 @@ if user_email == ADMIN_EMAIL:
     with tabs[3]:
         st.subheader("👑 관리자 종합 대시보드")
         
-        # 1. 수정 요청 현황 (원스톱 처리 도입)
         st.write("#### 🚨 직원 수정 요청 원스톱 처리")
         if pending_reqs_with_idx:
             st.warning(f"처리 대기 중인 수정 요청이 {len(pending_reqs_with_idx)}건 있습니다.")
@@ -341,13 +401,21 @@ if user_email == ADMIN_EMAIL:
                         st.cache_resource.clear()
                         st.rerun()
                         
-                    if cB.button("🔒 비공개(보류) 처리", key=f"hide_{row_idx}"):
+                    # 💡 연쇄 비공개 처리 로직
+                    if cB.button("🔒 비공개(보류) 일괄 처리", key=f"hide_{row_idx}"):
                         ws_request.update_cell(row_idx, 6, "비공개")
-                        # 메인 DB에서 찾아 상태를 '비공개'로 덮어쓰기
                         main_vals = ws_data.get_all_values()
+                        target_phone = ""
+                        # 해당 주소+호실의 가장 최신 연락처 파악
+                        for m_row in reversed(main_vals):
+                            if len(m_row) > 4 and m_row[0] == r_req[2] and m_row[1] == r_req[3]:
+                                target_phone = m_row[4]
+                                break
+                        # 동일 주소+호실+연락처를 가진 과거 모든 데이터 싹 다 비공개 덮어쓰기
                         for m_idx, m_row in enumerate(main_vals):
                             if m_idx > 0 and len(m_row) > 12 and m_row[0] == r_req[2] and m_row[1] == r_req[3]:
-                                ws_data.update_cell(m_idx + 1, 14, "비공개")
+                                if not target_phone or m_row[4] == target_phone:
+                                    ws_data.update_cell(m_idx + 1, 14, "비공개")
                         st.cache_resource.clear()
                         st.rerun()
                         
@@ -361,9 +429,7 @@ if user_email == ADMIN_EMAIL:
             
         st.write("---")
         
-        # 2. 직원 관리 및 토큰 수동 지급
         st.write("#### 👥 직원 토큰 관리 및 수동 지급")
-        
         c_add, c_grant = st.columns(2)
         with c_add:
             with st.expander("➕ 신규 직원 등록", expanded=False):
@@ -382,7 +448,7 @@ if user_email == ADMIN_EMAIL:
             with st.expander("🎁 기존 직원 토큰 수동 지급/차감", expanded=False):
                 target_staff = st.selectbox("대상 직원 선택", [row['이름'] for row in staff_records])
                 grant_amount = st.number_input("지급/차감 수량 (차감은 - 입력)", value=1)
-                grant_reason = st.text_input("사유 작성 (예: 1001호 번호 수정 포상)")
+                grant_reason = st.text_input("사유 작성 (예: 1001호 번호 제보 포상)")
                 if st.button("토큰 적용하기", type="primary"):
                     if grant_reason:
                         for i, r in enumerate(staff_records):
@@ -390,7 +456,7 @@ if user_email == ADMIN_EMAIL:
                                 old_token = int(r.get('보유토큰', 0))
                                 new_val = old_token + grant_amount
                                 ws_staff.update_cell(i + 2, 4, new_val)
-                                ws_history.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), target_staff, grant_amount, new_val, f"관리자 수동 지급: {grant_reason}"])
+                                ws_history.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), target_staff, grant_amount, new_val, f"포상: {grant_reason}"])
                                 st.success(f"{target_staff}님에게 토큰이 적용되었습니다.")
                                 st.cache_resource.clear()
                                 st.rerun() 
@@ -402,8 +468,6 @@ if user_email == ADMIN_EMAIL:
             st.dataframe(pd.DataFrame(staff_records), use_container_width=True)
             
         st.write("---")
-        
-        # 3. 전체 열람 감사(Audit) 로그
         st.write("#### 👁️‍🗨️ 전체 직원 데이터 열람/이용 추적 (최근 50건)")
         if history_records:
             df_all_hist = pd.DataFrame(history_records, columns=["일시", "직원명", "변동량", "잔여토큰", "이용 상세 사유"])

@@ -95,17 +95,13 @@ if user_email not in ALLOWED_USERS:
     st.error(f"⚠️ 승인되지 않은 계정입니다 ({user_email}). 대표님께 권한을 요청하세요.")
     st.stop()
 
-# 실시간 토큰 동기화 수정 (수동 동기화 오류 방지)
+# 💡 실시간 토큰 동기화 완벽 수정 (세션 기억 삭제, 무조건 원본 읽기)
 if user_email == ADMIN_EMAIL:
     user_name, user_tokens, staff_row_index = "이응찬 대표", 9999, None
 else:
     user_name = staff_dict[user_email]['이름']
     user_tokens = int(staff_dict[user_email].get('보유토큰', 0))
     staff_row_index = list(staff_dict.keys()).index(user_email) + 2 
-
-if 'current_tokens' not in st.session_state:
-    st.session_state.current_tokens = user_tokens
-user_tokens = st.session_state.current_tokens
 
 history_records = ws_history.get_all_values()[1:]
 
@@ -118,16 +114,13 @@ def format_phone(text):
     elif len(nums) == 10: return f"{nums[:3]}-{nums[3:6]}-{nums[6:]}"
     return nums
 
-# 토큰 업데이트 및 내역 기록 함수
+# 토큰 업데이트 및 내역 기록 함수 (세션 동기화 로직 제거 완료)
 def update_token(amount, reason):
-    global user_tokens
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     new_token_val = user_tokens + amount
     if staff_row_index:
         ws_staff.update_cell(staff_row_index, 4, new_token_val)
     ws_history.append_row([now, user_name, amount, new_token_val, reason])
-    st.session_state.current_tokens = new_token_val
-    user_tokens = new_token_val
     st.cache_resource.clear()
 
 # 24시간 이내 열람 여부 확인 로직
@@ -144,12 +137,12 @@ def is_unlocked_recently(addr, room):
             except: continue
     return False
 
-# 💡 대기중인 요청 데이터 확보 (인덱스 포함)
+# 대기중인 요청 데이터 확보 (인덱스 포함)
 req_all_values = ws_request.get_all_values()
 pending_reqs_with_idx = [(i+1, r) for i, r in enumerate(req_all_values) if i > 0 and len(r) > 5 and r[5] == '대기중']
 pending_req_count = len(pending_reqs_with_idx)
 
-# 💡 메인 DB 가져오기 및 비공개 필터링 (V5 핵심)
+# 메인 DB 가져오기 및 비공개 필터링 (V5 핵심)
 all_records_raw = ws_data.get_all_values()[1:]
 all_records = []
 for r in all_records_raw:
@@ -176,7 +169,7 @@ with st.sidebar.expander("📜 내 토큰 이용 내역 보기"):
     else:
         st.write("내역이 없습니다.")
 
-# 💡 포상 안내 문구 추가
+# 포상 안내 문구 추가
 st.sidebar.caption("🎁 우수 DB 정화 직원에겐 대표님의 특별 토큰이 수시로 지급됩니다.")
 st.sidebar.write("---")
 
@@ -225,7 +218,7 @@ with tabs[0]:
                     st.info(f"**소유주:** {name} ({birth})\n\n**연락처:** {phone}\n\n**보증금/월세:** {deposit}/{rent}\n\n**만기일:** {end_date}\n\n**특이사항:** {memo}")
                     with st.form(f"edit_addr_{idx}", clear_on_submit=True):
                         edit_memo = st.text_input("수정 요청 사유 (예: 연락처 변경)", key=f"req_{idx}")
-                        # 💡 꿀팁 안내 문구 추가
+                        # 꿀팁 안내 문구 추가
                         st.caption("💡 꿀팁: 변경된 진짜 연락처 등 정확한 정보를 함께 남겨주시면, 대표님이 확인 후 [포상 토큰 +1개]를 즉시 지급해 드립니다!")
                         if st.form_submit_button("🛠 대표님께 수정 요청하기"):
                             if edit_memo:
@@ -269,7 +262,7 @@ with tabs[1]:
                     
                     with st.form(f"edit_own_{idx}", clear_on_submit=True):
                         edit_memo = st.text_input("수정 요청 사유 (예: 번호 오기재)", key=f"req_own_{idx}")
-                        # 💡 꿀팁 안내 문구 추가
+                        # 꿀팁 안내 문구 추가
                         st.caption("💡 꿀팁: 변경된 진짜 연락처 등 정확한 정보를 함께 남겨주시면, 대표님이 확인 후 [포상 토큰 +1개]를 즉시 지급해 드립니다!")
                         if st.form_submit_button("🛠 대표님께 수정 요청하기"):
                             if edit_memo:
@@ -317,7 +310,7 @@ with tabs[2]:
                 full_addr = f"{f_city} {f_gu} {f_dong} {clean_bunji(f_bunji)}"
                 room_final = f"{f_sub_dong}동 {f_room}호" if f_sub_dong != "0" else f"{f_room}호"
                 
-                # 💡 중복 차단 완화: 과거에 올렸더라도 '비공개' 상태면 중복 통과 (부활 등록 가능)
+                # 중복 차단 완화: 과거에 올렸더라도 '비공개' 상태면 중복 통과 (부활 등록 가능)
                 duplicate = [r for r in all_records if r[0] == full_addr and r[1] == room_final and r[12] == user_name and r[13] != "비공개"]
                 if duplicate:
                     st.error(f"❌ 이미 {user_name}님이 등록하신 매물입니다!")
@@ -334,7 +327,7 @@ if user_email == ADMIN_EMAIL:
     with tabs[3]:
         st.subheader("👑 관리자 종합 대시보드")
         
-        # 1. 수정 요청 현황 (💡 원스톱 처리 도입)
+        # 1. 수정 요청 현황 (원스톱 처리 도입)
         st.write("#### 🚨 직원 수정 요청 원스톱 처리")
         if pending_reqs_with_idx:
             st.warning(f"처리 대기 중인 수정 요청이 {len(pending_reqs_with_idx)}건 있습니다.")

@@ -8,20 +8,25 @@ import urllib.parse
 import re
 import pandas as pd
 
-# --- 💡 1. UI 다이어트: 전체 폰트 크기 및 여백 축소 (CSS 주입) ---
+# --- 💡 1. UI 다이어트: 탭 잘림 해결 & 폰트 밸런스 조정 ---
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="wide")
 st.markdown("""
     <style>
         /* 전체 폰트 크기 축소 */
         html, body, [class*="css"]  { font-size: 14px !important; }
+        
         /* 버튼 크기 및 여백 축소 */
         .stButton>button { padding: 0.2rem 0.5rem; min-height: 2rem; }
-        /* 컨테이너 여백 축소 */
-        .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+        
+        /* 💡 컨테이너 상단 여백 복구 (탭 글씨 잘림 방지) */
+        .block-container { padding-top: 3.5rem; padding-bottom: 2rem; }
+        
         /* 사이드바 크기 조정 */
         [data-testid="stSidebar"] { width: 280px !important; }
-        /* 탭 글자 크기 축소 */
-        button[data-baseweb="tab"] > div[data-testid="stMarkdownContainer"] > p { font-size: 15px; }
+        
+        /* 💡 탭 글자 크기 및 높이 확보 */
+        button[data-baseweb="tab"] > div[data-testid="stMarkdownContainer"] > p { font-size: 15px; margin-bottom: 0px; }
+        button[data-baseweb="tab"] { height: 3rem; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -218,18 +223,20 @@ for i, r in enumerate(all_records_raw):
 all_records = list(temp_dict.values())
 all_records.reverse()
 
-# --- 💡 사이드바 (가이드라인 및 동기부여 UI 전면 개편) ---
+# --- 💡 사이드바 (가이드라인 폰트 확대) ---
 st.sidebar.markdown(f"### 👤 {user_name}")
 
 # 내 토큰 표시
 st.sidebar.markdown(f"**보유 토큰:** `{user_tokens} 개`")
-st.sidebar.caption("👉 `신규 매물 등록 +3`  |  `오류 제보 승인 +1`")
+# 💡 CSS로 글자 크기와 색상을 명확하게 지정하여 한 단계 더 키움
+st.sidebar.markdown("<p style='font-size: 13px; color: #4a4a4a; margin-top: -10px;'>👉 신규 매물 등록 +3  |  오류 제보 승인 +1</p>", unsafe_allow_html=True)
 
 st.sidebar.write("") # 여백
 
 # 내 기여도 표시
 st.sidebar.markdown(f"**이번 달 기여도:** `{my_month_score} 점`")
-st.sidebar.caption("🏆 `신규등록 5점` | `오류제보 3점` | `정보갱신 1점`")
+# 💡 CSS로 글자 크기와 색상을 명확하게 지정
+st.sidebar.markdown("<p style='font-size: 13px; color: #4a4a4a; margin-top: -10px;'>🏆 신규등록 5점 | 오류제보 3점 | 정보갱신 1점</p>", unsafe_allow_html=True)
 
 st.sidebar.write("---")
 
@@ -266,7 +273,6 @@ tabs = st.tabs(tabs_list)
 
 # --- [탭 1] 주소 검색 ---
 with tabs[0]:
-    # 💡 폼 구조 도입 (입력 시 깜빡임 방지)
     with st.form("search_addr_form"):
         c1, c2, c3 = st.columns([2, 2, 1])
         d = c1.text_input("동/건물명", key="t1_dong", placeholder="방이동")
@@ -340,7 +346,6 @@ with tabs[0]:
                 if st.session_state.get(toggle_key, False):
                     st.info(f"**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent} | **만기:** {end_date}\n\n**특이사항:** {memo}")
                     
-                    # 💡 2020년 과거 장부 갱신 버튼 복구
                     if "2020-" in str(reg_date):
                         if st.button("✅ 현 소유주 일치 확인 (최신 DB로 갱신)", key=f"upd_2020_{idx}"):
                             ws_data.update_cell(row_idx, 12, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
@@ -350,7 +355,6 @@ with tabs[0]:
                             st.rerun()
                             
                     with st.form(f"edit_addr_{idx}", clear_on_submit=True):
-                        # 💡 통화일 필수 기재 추가
                         edit_memo = st.text_input("수정 요청 사유 (예: 번호오류)")
                         call_date = st.text_input("확인 통화일 (예: 3월 3일 오후 2시)")
                         
@@ -375,7 +379,6 @@ with tabs[0]:
 
 # --- [탭 2] 소유주 검색 ---
 with tabs[1]:
-    # 💡 폼 구조 도입
     with st.form("search_owner_form"):
         c4, c5 = st.columns(2)
         sn = c4.text_input("성함", key="t2_name")
@@ -495,7 +498,6 @@ with tabs[2]:
                 full_addr = f"{f_city} {f_gu} {f_dong} {clean_bunji(f_bunji)}"
                 room_final = f"{f_sub_dong}동 {f_room}호" if f_sub_dong != "0" else f"{f_room}호"
                 
-                # 중복 철통 방어
                 duplicate = [r for r in all_records if r[0] == full_addr and r[1] == room_final and r[13] != "잘못됨"]
                 if duplicate:
                     st.error(f"❌ 이미 등록된 매물입니다! (정보 변경 시 검색 후 [🛠️ 수정요청] 요망)")
@@ -504,7 +506,6 @@ with tabs[2]:
                     new_row = [full_addr, room_final, f_name, f_birth, format_phone(f_phone), f_deposit, f_rent, f_end_date, "", "미분류", f_memo, now, user_name, "정상"]
                     ws_data.append_row(new_row)
                     
-                    # 💡 신규 등록 시 토큰 3개 지급
                     update_token(user_name, 3, f"신규 등록 ({full_addr} {room_final})")
                     st.cache_data.clear() 
                     st.success("✅ 신규 매물 등록 완료! 토큰 +3개 / 기여도 +5점 자동 지급!")
@@ -558,7 +559,7 @@ if user_email == ADMIN_EMAIL:
             
             if in_period and req_user in staff_stats:
                 staff_stats[req_user]["오류제보"] += 1
-                if req_stat in ["처리완료", "비공개"]: # 비공개 처리도 유효 제보로 인정
+                if req_stat in ["처리완료", "비공개"]: 
                     staff_stats[req_user]["살려낸DB"] += 1
 
         st.markdown("##### 📊 DB 자산 증식 현황")
@@ -588,7 +589,6 @@ if user_email == ADMIN_EMAIL:
                         for m_idx, m_row in enumerate(all_records_raw):
                             if m_row[0] == r_req[2] and m_row[1] == r_req[3]:
                                 ws_data.update_cell(m_idx + 2, 12, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-                        # 💡 승인 시 요청자에게 1토큰 지급
                         update_token(req_emp_name, 1, f"수정요청 승인 포상 ({r_req[2]} {r_req[3]})")
                         st.cache_data.clear() 
                         st.rerun()
@@ -607,7 +607,6 @@ if user_email == ADMIN_EMAIL:
                         for m_idx, m_row in enumerate(all_records_raw):
                             if m_row[0] == r_req[2] and m_row[1] == r_req[3]:
                                 ws_data.update_cell(m_idx + 2, 14, "잘못됨")
-                        # 삭제(허위제보) 시에는 토큰을 주지 않음
                         st.cache_data.clear()
                         st.rerun()
                 st.write("---")
@@ -616,7 +615,6 @@ if user_email == ADMIN_EMAIL:
         st.write("---")
         st.write("#### 👥 직원 관리 및 포상")
         
-        # 💡 신규 직원 등록을 폼으로 가두기 (깜빡임 방지)
         with st.expander("➕ 신규 직원 등록"):
             with st.form("add_staff_form", clear_on_submit=True):
                 new_email = st.text_input("구글 이메일")

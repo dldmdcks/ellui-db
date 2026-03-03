@@ -306,7 +306,7 @@ with tabs[0]:
         st.caption(f"검색 결과: {len(st.session_state.addr_search_res)}건")
         
         for idx, row in enumerate(st.session_state.addr_search_res):
-            # 💡 건물 용도(b_type) 추가
+            # 💡 건물 용도(b_type) 포함
             addr, room, name, birth, phone, deposit, rent, end_date, _, b_type, memo, reg_date, registrar, status, row_idx = row
             
             manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if b in addr), None)
@@ -356,7 +356,7 @@ with tabs[0]:
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
                 
                 if st.session_state.get(toggle_key, False):
-                    # 💡 상세 정보에 건물 용도 추가
+                    # 💡 상세 정보에 건물 용도(b_type) 추가
                     st.info(f"**용도:** {b_type}\n\n**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent} | **만기:** {end_date}\n\n**특이사항:** {memo}")
                     
                     if "2020-" in str(reg_date):
@@ -406,6 +406,7 @@ with tabs[1]:
     if st.session_state.owner_search_res is not None:
         st.caption(f"검색 결과: {len(st.session_state.owner_search_res)}건")
         for idx, row in enumerate(st.session_state.owner_search_res):
+            # 💡 건물 용도(b_type) 포함
             addr, room, name, birth, phone, deposit, rent, end_date, _, b_type, memo, reg_date, registrar, status, row_idx = row
             
             manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if b in addr), None)
@@ -448,7 +449,7 @@ with tabs[1]:
                 if st.button("🔓 재열람가능", key=f"btn_re_own_{idx}"):
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
                 if st.session_state.get(toggle_key, False):
-                    # 💡 소유주 검색 쪽 상세 정보에도 용도 추가
+                    # 💡 소유주 검색 쪽 상세 정보에도 용도(b_type) 추가
                     st.info(f"**용도:** {b_type}\n\n**연락처:** {phone} | **만기/보증/월세:** {end_date} / {deposit} / {rent}\n\n**특이사항:** {memo}")
                     
                     if "2020-" in str(reg_date):
@@ -540,8 +541,8 @@ if user_email == ADMIN_EMAIL:
         
         filter_period = st.radio("통계 기간 선택", ["이번 달", "올해 누적", "전체 누적"], horizontal=True)
         
+        # 직원별 실적 집계용 딕셔너리
         staff_stats = {r['이름']: {"신규등록": 0, "오류제보": 0, "살려낸DB": 0} for r in staff_records}
-        new_db_cnt, up_db_cnt = 0, 0
         
         for r in all_records_raw:
             reg = str(r[11]) if len(r) > 11 else ""
@@ -554,8 +555,8 @@ if user_email == ADMIN_EMAIL:
             elif filter_period == "전체 누적": in_period = True
             
             if in_period:
+                # '잘못됨'이 아니고 옛날 장부가 아닌 데이터는 신규등록으로 집계
                 if stat != "잘못됨" and "2020-" not in reg:
-                    new_db_cnt += 1 # 💡 신규 및 갱신된(활성화) DB 총합
                     if registrar in staff_stats:
                         staff_stats[registrar]["신규등록"] += 1
                         
@@ -569,16 +570,17 @@ if user_email == ADMIN_EMAIL:
             elif filter_period == "올해 누적" and this_year_str in req_date: in_period = True
             elif filter_period == "전체 누적": in_period = True
             
-           if in_period and req_user in staff_stats:
+            if in_period and req_user in staff_stats:
                 staff_stats[req_user]["오류제보"] += 1
                 if req_stat in ["처리완료", "비공개"]: 
                     staff_stats[req_user]["살려낸DB"] += 1
 
-        # 💡 신규 등록 건수와 갱신(승인/살려낸) 건수를 따로 합산
+        # 💡 신규 등록 건수와 갱신(승인/살려낸) 건수를 개별 합산
         total_new = sum(stat["신규등록"] for stat in staff_stats.values())
         total_renew = sum(stat["살려낸DB"] for stat in staff_stats.values())
 
         st.markdown("##### 📊 DB 자산 증식 현황")
+        # 💡 두 개의 수치를 나란히 분리해서 표시
         colA, colB = st.columns(2)
         colA.metric(f"[{filter_period}] 신규 등록 매물", f"{total_new} 건")
         colB.metric(f"[{filter_period}] 갱신 및 승인된 매물", f"{total_renew} 건")

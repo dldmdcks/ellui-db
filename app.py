@@ -569,14 +569,19 @@ if user_email == ADMIN_EMAIL:
             elif filter_period == "올해 누적" and this_year_str in req_date: in_period = True
             elif filter_period == "전체 누적": in_period = True
             
-            if in_period and req_user in staff_stats:
+           if in_period and req_user in staff_stats:
                 staff_stats[req_user]["오류제보"] += 1
                 if req_stat in ["처리완료", "비공개"]: 
                     staff_stats[req_user]["살려낸DB"] += 1
 
+        # 💡 신규 등록 건수와 갱신(승인/살려낸) 건수를 따로 합산
+        total_new = sum(stat["신규등록"] for stat in staff_stats.values())
+        total_renew = sum(stat["살려낸DB"] for stat in staff_stats.values())
+
         st.markdown("##### 📊 DB 자산 증식 현황")
-        # 💡 삭제 수치(걸러낸 DB) 제거 후 신규/갱신 DB 현황만 표시
-        st.metric(f"[{filter_period}] 신규 확보 및 갱신된 DB", f"{new_db_cnt} 건")
+        colA, colB = st.columns(2)
+        colA.metric(f"[{filter_period}] 신규 등록 매물", f"{total_new} 건")
+        colB.metric(f"[{filter_period}] 갱신 및 승인된 매물", f"{total_renew} 건")
         st.write("---")
         
         st.markdown("##### 🏆 직원별 기여도 랭킹 (5:3:1 점수제)")

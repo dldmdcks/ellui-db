@@ -27,7 +27,7 @@ st.markdown("""
 
 ADMIN_EMAIL = "dldmdcks94@gmail.com"
 
-# 2. 로그인 및 DB 연결 설정 (변경 없음)
+# 2. 로그인 및 DB 연결 설정
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
     token_dict = json.loads(st.secrets["google_token_json"])
@@ -71,7 +71,7 @@ if not st.session_state.connected:
     st.link_button("🔵 Google 계정으로 로그인", login_url, type="primary", use_container_width=True)
     st.stop()
 
-# 3. 데이터베이스 연동 및 시트 객체 생성 (변경 없음)
+# 3. 데이터베이스 연동 및 시트 객체 생성
 @st.cache_resource
 def get_ss():
     creds = Credentials.from_authorized_user_info(token_dict)
@@ -147,14 +147,21 @@ def extract_tags(memo):
     if "대출" in m: tags.append("🏦대출")
     return " ".join(tags)
 
-def update_token(amount, reason):
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    new_token_val = user_tokens + amount
-    if staff_row_index:
-        ws_staff.update_cell(staff_row_index, 4, new_token_val)
-    ws_history.append_row([now, user_name, amount, new_token_val, reason])
-    st.cache_data.clear()
-    st.cache_resource.clear()
+# 💡 자동 토큰 지급 헬퍼 함수
+def update_token(target_name, amount, reason):
+    if target_name == "이응찬 대표": return # 대표님은 토큰 무한
+    target_idx = None
+    for i, r in enumerate(staff_records):
+        if r['이름'] == target_name:
+            target_idx = i + 2
+            old_token = int(r.get('보유토큰', 0))
+            break
+            
+    if target_idx:
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        new_token_val = old_token + amount
+        ws_staff.update_cell(target_idx, 4, new_token_val)
+        ws_history.append_row([now, target_name, amount, new_token_val, reason])
 
 def is_unlocked_recently(addr, room):
     if user_email == ADMIN_EMAIL: return True
@@ -175,6 +182,25 @@ pending_set = {(r[2], r[3]) for _, r in pending_reqs_with_idx}
 all_records_raw = all_data_raw[1:]
 temp_dict = {}
 
+# 💡 기여도 계산을 위한 내 점수 파악 (사이드바 표시용)
+my_month_score = 0
+now_date = datetime.now()
+this_month_str = now_date.strftime("%Y-%m")
+
+for r in all_records_raw:
+    reg = str(r[11]) if len(r) > 11 else ""
+    registrar = str(r[12]) if len(r) > 12 else ""
+    if registrar == user_name and this_month_str in reg and "2020-" not in reg:
+        my_month_score += 5 # 신규 등록 5점
+
+for r in req_all_values[1:]:
+    req_date = str(r[0])
+    req_user = str(r[1])
+    req_stat = str(r[5])
+    if req_user == user_name and this_month_str in req_date:
+        my_month_score += 3 # 제보 3점
+        if req_stat == "처리완료": my_month_score += 1 # 갱신(승인) 시 추가 1점
+
 for i, r in enumerate(all_records_raw):
     row_idx = i + 2 
     status = r[13].strip() if len(r) > 13 else "정상"
@@ -192,16 +218,23 @@ for i, r in enumerate(all_records_raw):
 all_records = list(temp_dict.values())
 all_records.reverse()
 
-# --- 사이드바 ---
+# --- 💡 사이드바 (가이드라인 및 동기부여 UI 전면 개편) ---
 st.sidebar.markdown(f"### 👤 {user_name}")
-st.sidebar.metric(label="내 보유 토큰", value=f"{user_tokens} 개")
-st.sidebar.caption("💡 매달 기여도에 따라서 토큰 지급")
+
+# 내 토큰 표시
+st.sidebar.markdown(f"**보유 토큰:** `{user_tokens} 개`")
+st.sidebar.caption("👉 `신규 매물 등록 +3`  |  `오류 제보 승인 +1`")
+
+st.sidebar.write("") # 여백
+
+# 내 기여도 표시
+st.sidebar.markdown(f"**이번 달 기여도:** `{my_month_score} 점`")
+st.sidebar.caption("🏆 `신규등록 5점` | `오류제보 3점` | `정보갱신 1점`")
+
 st.sidebar.write("---")
 
-# --- 💡 2. 관리자용 전체 토큰 감시망 & 실시간 알림 ---
 if user_email == ADMIN_EMAIL:
     if pending_req_count > 0:
-        # 관리자는 왼쪽에서 항상 알림을 봄
         st.sidebar.error(f"🚨 대기 중인 수정 요청: {pending_req_count}건")
         st.sidebar.write("---")
         
@@ -233,12 +266,16 @@ tabs = st.tabs(tabs_list)
 
 # --- [탭 1] 주소 검색 ---
 with tabs[0]:
-    c1, c2, c3 = st.columns([2, 2, 1])
-    d = c1.text_input("동/건물명", key="t1_dong", placeholder="방이동")
-    b = c2.text_input("번지", key="t1_bunji", placeholder="28-2")
-    r_search = c3.text_input("호실", key="t1_room", placeholder="101")
-    
-    if st.button("주소 검색", use_container_width=True, type="primary"):
+    # 💡 폼 구조 도입 (입력 시 깜빡임 방지)
+    with st.form("search_addr_form"):
+        c1, c2, c3 = st.columns([2, 2, 1])
+        d = c1.text_input("동/건물명", key="t1_dong", placeholder="방이동")
+        b = c2.text_input("번지", key="t1_bunji", placeholder="28-2")
+        r_search = c3.text_input("호실", key="t1_room", placeholder="101")
+        
+        submitted = st.form_submit_button("주소 검색", type="primary", use_container_width=True)
+        
+    if submitted:
         res = [
             r for r in all_records 
             if (d.replace(" ","") in r[0].replace(" ","")) 
@@ -294,7 +331,7 @@ with tabs[0]:
                             if new_phone:
                                 ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, f"[제보] {new_phone}", "대기중"])
                                 st.cache_data.clear()
-                                st.success("제보 완료! 승인 시 토큰 지급")
+                                st.success("제보 완료! 승인 시 토큰 1개 지급")
                                 st.rerun()
             elif is_unlocked:
                 if st.button("🔓 재열람가능", key=f"btn_re_{idx}"):
@@ -303,18 +340,33 @@ with tabs[0]:
                 if st.session_state.get(toggle_key, False):
                     st.info(f"**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent} | **만기:** {end_date}\n\n**특이사항:** {memo}")
                     
+                    # 💡 2020년 과거 장부 갱신 버튼 복구
+                    if "2020-" in str(reg_date):
+                        if st.button("✅ 현 소유주 일치 확인 (최신 DB로 갱신)", key=f"upd_2020_{idx}"):
+                            ws_data.update_cell(row_idx, 12, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                            ws_data.update_cell(row_idx, 13, user_name)
+                            st.cache_data.clear()
+                            st.success("최신 데이터로 갱신 완료! 기여도 +1점 획득!")
+                            st.rerun()
+                            
                     with st.form(f"edit_addr_{idx}", clear_on_submit=True):
-                        edit_memo = st.text_input("수정 요청 사유 (예: 번호오류)", key=f"req_{idx}")
+                        # 💡 통화일 필수 기재 추가
+                        edit_memo = st.text_input("수정 요청 사유 (예: 번호오류)")
+                        call_date = st.text_input("확인 통화일 (예: 3월 3일 오후 2시)")
+                        
                         if st.form_submit_button("🛠️ 수정요청하기"):
-                            if edit_memo:
-                                ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, edit_memo, "대기중"])
+                            if edit_memo and call_date:
+                                full_reason = f"[{call_date} 통화] {edit_memo}"
+                                ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, full_reason, "대기중"])
                                 st.cache_data.clear()
-                                st.success("요청 전송됨!")
+                                st.success("요청 전송 완료! 승인 시 토큰 1개 지급")
                                 st.rerun()
+                            else:
+                                st.warning("사유와 통화일을 모두 입력해주세요.")
             else:
                 if st.button("🔓 상세정보 열람 (토큰 1개)", key=f"btn_addr_{idx}"):
                     if user_tokens >= 1:
-                        update_token(-1, f"매물 열람 ({addr} {room})")
+                        update_token(user_name, -1, f"매물 열람 ({addr} {room})")
                         st.session_state[unlock_key] = True
                         st.session_state[toggle_key] = True 
                         st.rerun()
@@ -323,8 +375,14 @@ with tabs[0]:
 
 # --- [탭 2] 소유주 검색 ---
 with tabs[1]:
-    c4, c5 = st.columns(2); sn = c4.text_input("성함", key="t2_name"); sb = c5.text_input("생년월일(6자리)", key="t2_birth")
-    if st.button("소유주 검색", use_container_width=True, type="primary"):
+    # 💡 폼 구조 도입
+    with st.form("search_owner_form"):
+        c4, c5 = st.columns(2)
+        sn = c4.text_input("성함", key="t2_name")
+        sb = c5.text_input("생년월일(6자리)", key="t2_birth")
+        submitted_own = st.form_submit_button("소유주 검색", type="primary", use_container_width=True)
+        
+    if submitted_own:
         res = [r for r in all_records if (sn in r[2]) and (not sb or sb == r[3])]
         res.sort(key=lambda x: extract_room_number(x[1]))
         st.session_state.owner_search_res = res
@@ -375,18 +433,32 @@ with tabs[1]:
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
                 if st.session_state.get(toggle_key, False):
                     st.info(f"**연락처:** {phone} | **만기/보증/월세:** {end_date} / {deposit} / {rent}\n\n**특이사항:** {memo}")
+                    
+                    if "2020-" in str(reg_date):
+                        if st.button("✅ 현 소유주 일치 확인 (갱신)", key=f"upd_2020_own_{idx}"):
+                            ws_data.update_cell(row_idx, 12, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                            ws_data.update_cell(row_idx, 13, user_name)
+                            st.cache_data.clear()
+                            st.success("갱신 완료! 기여도 +1점 획득!")
+                            st.rerun()
+
                     with st.form(f"edit_own_{idx}", clear_on_submit=True):
-                        edit_memo = st.text_input("사유", key=f"req_own_{idx}")
+                        edit_memo = st.text_input("사유")
+                        call_date = st.text_input("확인 통화일")
+                        
                         if st.form_submit_button("🛠️ 수정요청하기"):
-                            if edit_memo:
-                                ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, edit_memo, "대기중"])
+                            if edit_memo and call_date:
+                                full_reason = f"[{call_date} 통화] {edit_memo}"
+                                ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, full_reason, "대기중"])
                                 st.cache_data.clear()
                                 st.success("요청 완료!")
                                 st.rerun()
+                            else:
+                                st.warning("사유와 통화일을 입력해주세요.")
             else:
                 if st.button("🔓 상세정보 열람 (토큰 1개)", key=f"btn_own_{idx}"):
                     if user_tokens >= 1:
-                        update_token(-1, f"매물 열람 ({addr} {room})")
+                        update_token(user_name, -1, f"매물 열람 ({addr} {room})")
                         st.session_state[unlock_key] = True
                         st.session_state[toggle_key] = True
                         st.rerun()
@@ -395,7 +467,7 @@ with tabs[1]:
 
 # --- [탭 3] 신규 등록 ---
 with tabs[2]:
-    st.subheader("📝 신규 등록 (완료 시 토큰 +1)")
+    st.subheader("📝 신규 등록 (완료 시 +3 토큰 / +5점)")
     with st.form("reg_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -414,7 +486,6 @@ with tabs[2]:
             f_end_date = st.text_input("현 만기일", placeholder="2026-05-30")
         f_memo = st.text_area("특이사항")
         
-        # 💡 3. 즉각적인 시트 반영 및 화면 업데이트 (캐시 초기화)
         if st.form_submit_button("💾 데이터 등록", type="primary", use_container_width=True):
             if not f_room.isdigit() or not f_birth.isdigit() or not f_phone.isdigit():
                 st.error("⚠️ 호실, 생년월일, 연락처는 숫자만 입력하세요.")
@@ -424,16 +495,19 @@ with tabs[2]:
                 full_addr = f"{f_city} {f_gu} {f_dong} {clean_bunji(f_bunji)}"
                 room_final = f"{f_sub_dong}동 {f_room}호" if f_sub_dong != "0" else f"{f_room}호"
                 
-                duplicate = [r for r in all_records if r[0] == full_addr and r[1] == room_final and r[12] == user_name and r[13] == "정상"]
+                # 중복 철통 방어
+                duplicate = [r for r in all_records if r[0] == full_addr and r[1] == room_final and r[13] != "잘못됨"]
                 if duplicate:
-                    st.error(f"❌ 이미 등록된 정상 매물입니다!")
+                    st.error(f"❌ 이미 등록된 매물입니다! (정보 변경 시 검색 후 [🛠️ 수정요청] 요망)")
                 else:
                     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     new_row = [full_addr, room_final, f_name, f_birth, format_phone(f_phone), f_deposit, f_rent, f_end_date, "", "미분류", f_memo, now, user_name, "정상"]
                     ws_data.append_row(new_row)
-                    update_token(1, f"신규 등록 ({full_addr} {room_final})")
-                    st.cache_data.clear() # 강제 동기화: 다음 검색 시 즉시 노출
-                    st.success("✅ 등록 완료! 토큰 +1 💰")
+                    
+                    # 💡 신규 등록 시 토큰 3개 지급
+                    update_token(user_name, 3, f"신규 등록 ({full_addr} {room_final})")
+                    st.cache_data.clear() 
+                    st.success("✅ 신규 매물 등록 완료! 토큰 +3개 / 기여도 +5점 자동 지급!")
                     st.rerun()
 
 # --- [탭 4] 관리자 전용 ---
@@ -445,16 +519,13 @@ if user_email == ADMIN_EMAIL:
             st.cache_data.clear()
             st.rerun()
             
-        # 💡 4. 기간별 필터 및 상세 기여도 리더보드
         now_date = datetime.now()
         this_month_str = now_date.strftime("%Y-%m")
         this_year_str = now_date.strftime("%Y")
         
         filter_period = st.radio("통계 기간 선택", ["이번 달", "올해 누적", "전체 누적"], horizontal=True)
         
-        # 직원별 실적 집계용 딕셔너리
         staff_stats = {r['이름']: {"신규등록": 0, "오류제보": 0, "살려낸DB": 0} for r in staff_records}
-        
         new_db_cnt, up_db_cnt, del_db_cnt = 0, 0, 0
         
         for r in all_records_raw:
@@ -475,7 +546,6 @@ if user_email == ADMIN_EMAIL:
                     if registrar in staff_stats:
                         staff_stats[registrar]["신규등록"] += 1
                         
-        # 요청 내역(제보/수정) 집계
         for r in req_all_values[1:]:
             req_date = str(r[0])
             req_user = str(r[1])
@@ -488,7 +558,7 @@ if user_email == ADMIN_EMAIL:
             
             if in_period and req_user in staff_stats:
                 staff_stats[req_user]["오류제보"] += 1
-                if req_stat == "처리완료":
+                if req_stat in ["처리완료", "비공개"]: # 비공개 처리도 유효 제보로 인정
                     staff_stats[req_user]["살려낸DB"] += 1
 
         st.markdown("##### 📊 DB 자산 증식 현황")
@@ -497,42 +567,47 @@ if user_email == ADMIN_EMAIL:
         colB.metric(f"[{filter_period}] 걸러낸 썩은 DB", f"{del_db_cnt} 건", delta="블랙리스트", delta_color="inverse")
         st.write("---")
         
-        st.markdown("##### 🏆 직원별 기여도 랭킹")
+        st.markdown("##### 🏆 직원별 기여도 랭킹 (5:3:1 점수제)")
         df_stats = pd.DataFrame.from_dict(staff_stats, orient='index').reset_index()
-        df_stats.columns = ["직원명", "신규 등록 건수", "오류 제보 건수", "승인(살려낸) 건수"]
-        df_stats["총 기여도"] = df_stats["신규 등록 건수"] + df_stats["승인(살려낸) 건수"]
-        df_stats = df_stats.sort_values(by="총 기여도", ascending=False)
+        df_stats.columns = ["직원명", "신규 (5점)", "제보 (3점)", "갱신승인 (1점)"]
+        df_stats["총 기여도 점수"] = (df_stats["신규 (5점)"] * 5) + (df_stats["제보 (3점)"] * 3) + (df_stats["갱신승인 (1점)"] * 1)
+        df_stats = df_stats.sort_values(by="총 기여도 점수", ascending=False)
         st.dataframe(df_stats, use_container_width=True, hide_index=True)
 
         st.write("---")
-        st.write("#### 🚨 직원 수정 요청 처리")
+        st.write("#### 🚨 직원 수정 요청 처리 (승인 시 해당 직원 토큰 +1 자동 지급)")
         if pending_reqs_with_idx:
             for row_idx, r_req in pending_reqs_with_idx:
                 with st.container():
-                    st.info(f"**[요청: {r_req[1]}]** 📍 {r_req[2]} {r_req[3]}  |  사유: {r_req[4]}")
+                    req_emp_name = r_req[1]
+                    st.info(f"**[요청: {req_emp_name}]** 📍 {r_req[2]} {r_req[3]}  |  사유: {r_req[4]}")
                     cA, cB, cC = st.columns(3)
                     
-                    if cA.button("✅ 수정 완료 (최신화)", key=f"ok_{row_idx}"):
+                    if cA.button("✅ 수정 완료 (토큰+1 지급)", key=f"ok_{row_idx}"):
                         ws_request.update_cell(row_idx, 6, "처리완료")
                         for m_idx, m_row in enumerate(all_records_raw):
                             if m_row[0] == r_req[2] and m_row[1] == r_req[3]:
                                 ws_data.update_cell(m_idx + 2, 12, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-                        st.cache_data.clear() # 처리 즉시 동기화
+                        # 💡 승인 시 요청자에게 1토큰 지급
+                        update_token(req_emp_name, 1, f"수정요청 승인 포상 ({r_req[2]} {r_req[3]})")
+                        st.cache_data.clear() 
                         st.rerun()
                         
-                    if cB.button("🔒 비공개 (숨김)", key=f"hide_{row_idx}"):
+                    if cB.button("🔒 비공개 처리 (토큰+1 지급)", key=f"hide_{row_idx}"):
                         ws_request.update_cell(row_idx, 6, "비공개")
                         for m_idx, m_row in enumerate(all_records_raw):
                             if m_row[0] == r_req[2] and m_row[1] == r_req[3]:
                                 ws_data.update_cell(m_idx + 2, 14, "비공개")
+                        update_token(req_emp_name, 1, f"비공개 제보 포상 ({r_req[2]} {r_req[3]})")
                         st.cache_data.clear()
                         st.rerun()
                         
-                    if cC.button("🗑️ 영구 삭제 (잘못됨)", key=f"del_{row_idx}"):
+                    if cC.button("🗑️ 영구 삭제 (잘못됨/반려)", key=f"del_{row_idx}"):
                         ws_request.update_cell(row_idx, 6, "삭제")
                         for m_idx, m_row in enumerate(all_records_raw):
                             if m_row[0] == r_req[2] and m_row[1] == r_req[3]:
                                 ws_data.update_cell(m_idx + 2, 14, "잘못됨")
+                        # 삭제(허위제보) 시에는 토큰을 주지 않음
                         st.cache_data.clear()
                         st.rerun()
                 st.write("---")
@@ -540,33 +615,33 @@ if user_email == ADMIN_EMAIL:
         
         st.write("---")
         st.write("#### 👥 직원 관리 및 포상")
-        c_add, c_grant = st.columns(2)
-        with c_add:
-            with st.expander("➕ 신규 직원 등록"):
+        
+        # 💡 신규 직원 등록을 폼으로 가두기 (깜빡임 방지)
+        with st.expander("➕ 신규 직원 등록"):
+            with st.form("add_staff_form", clear_on_submit=True):
                 new_email = st.text_input("구글 이메일")
                 new_n = st.text_input("이름")
                 start_token = st.number_input("초기 토큰", value=10)
-                if st.button("권한 부여"):
+                submit_staff = st.form_submit_button("권한 부여")
+                
+                if submit_staff:
                     if "@" in new_email and new_n:
                         ws_staff.append_row([new_email, new_n, datetime.now().strftime('%Y-%m-%d'), start_token, ""])
                         st.cache_data.clear()
-                        st.success("추가됨!")
+                        st.success(f"{new_n}님 등록 완료!")
                         st.rerun()
-        with c_grant:
-            with st.expander("🎁 토큰 수동 지급"):
+                        
+        with st.expander("🎁 토큰 수동 지급"):
+            with st.form("grant_token_form", clear_on_submit=True):
                 target_staff = st.selectbox("직원", [row['이름'] for row in staff_records])
                 grant_amount = st.number_input("수량", value=1)
                 grant_reason = st.text_input("사유")
-                if st.button("지급하기", type="primary"):
+                submit_grant = st.form_submit_button("지급하기")
+                
+                if submit_grant:
                     if grant_reason:
-                        for i, r in enumerate(staff_records):
-                            if r['이름'] == target_staff:
-                                new_val = int(r.get('보유토큰', 0)) + grant_amount
-                                ws_staff.update_cell(i + 2, 4, new_val)
-                                ws_history.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), target_staff, grant_amount, new_val, f"포상: {grant_reason}"])
-                                st.cache_data.clear()
-                                st.success("지급 완료!")
-                                st.rerun() 
-                                break
+                        update_token(target_staff, grant_amount, f"수동포상: {grant_reason}")
+                        st.success("지급 완료!")
+                        st.rerun() 
 
         if staff_records: st.dataframe(pd.DataFrame(staff_records), use_container_width=True)

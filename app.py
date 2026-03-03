@@ -356,13 +356,15 @@ with tabs[0]:
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
                 
                 if st.session_state.get(toggle_key, False):
-                    # 💡 상세 정보에 건물 용도(b_type) 추가
+                    # 💡 상세 정보에 건물 용도 추가
                     st.info(f"**용도:** {b_type}\n\n**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent} | **만기:** {end_date}\n\n**특이사항:** {memo}")
                     
                     if "2020-" in str(reg_date):
                         if st.button("✅ 현 소유주 일치 확인 (최신 DB로 갱신)", key=f"upd_2020_{idx}"):
                             ws_data.update_cell(row_idx, 12, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                             ws_data.update_cell(row_idx, 13, user_name)
+                            # 💡 소유주 확인 갱신 내역을 토큰내역(기록장)에 남겨서 대시보드 통계용으로 씁니다
+                            ws_history.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, 0, user_tokens, "과거 DB 갱신"])
                             st.cache_data.clear()
                             st.success("최신 데이터로 갱신 완료! 기여도 +1점 획득!")
                             st.rerun()
@@ -449,13 +451,15 @@ with tabs[1]:
                 if st.button("🔓 재열람가능", key=f"btn_re_own_{idx}"):
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
                 if st.session_state.get(toggle_key, False):
-                    # 💡 소유주 검색 쪽 상세 정보에도 용도(b_type) 추가
+                    # 💡 소유주 검색 쪽 상세 정보에도 용도 추가
                     st.info(f"**용도:** {b_type}\n\n**연락처:** {phone} | **만기/보증/월세:** {end_date} / {deposit} / {rent}\n\n**특이사항:** {memo}")
                     
                     if "2020-" in str(reg_date):
                         if st.button("✅ 현 소유주 일치 확인 (갱신)", key=f"upd_2020_own_{idx}"):
                             ws_data.update_cell(row_idx, 12, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                             ws_data.update_cell(row_idx, 13, user_name)
+                            # 💡 토큰내역(기록장)에 통계용 데이터 남김
+                            ws_history.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, 0, user_tokens, "과거 DB 갱신"])
                             st.cache_data.clear()
                             st.success("갱신 완료! 기여도 +1점 획득!")
                             st.rerun()
@@ -541,49 +545,56 @@ if user_email == ADMIN_EMAIL:
         
         filter_period = st.radio("통계 기간 선택", ["이번 달", "올해 누적", "전체 누적"], horizontal=True)
         
-        # 직원별 실적 집계용 딕셔너리
+        # 💡 직원별 실적 집계 딕셔너리
         staff_stats = {r['이름']: {"신규등록": 0, "오류제보": 0, "살려낸DB": 0} for r in staff_records}
         
-        for r in all_records_raw:
-            reg = str(r[11]) if len(r) > 11 else ""
-            stat = str(r[13]) if len(r) > 13 else "정상"
-            registrar = str(r[12]) if len(r) > 12 else ""
-            
-            in_period = False
-            if filter_period == "이번 달" and this_month_str in reg: in_period = True
-            elif filter_period == "올해 누적" and this_year_str in reg: in_period = True
-            elif filter_period == "전체 누적": in_period = True
-            
-            if in_period:
-                # '잘못됨'이 아니고 옛날 장부가 아닌 데이터는 신규등록으로 집계
-                if stat != "잘못됨" and "2020-" not in reg:
-                    if registrar in staff_stats:
-                        staff_stats[registrar]["신규등록"] += 1
+        # 💡 통계 지표 변수 초기화
+        cnt_new, cnt_renew, cnt_req_ok, cnt_req_hide = 0, 0, 0, 0
+        
+        # 1. '신규 등록' 및 '단순 갱신' 카운팅 (토큰내역 기록장 기준 - 중복 원천 차단)
+        for r in history_records:
+            if len(r) > 4:
+                h_date, h_name, h_reason = str(r[0]), str(r[1]), str(r[4])
+                in_period = False
+                if filter_period == "이번 달" and this_month_str in h_date: in_period = True
+                elif filter_period == "올해 누적" and this_year_str in h_date: in_period = True
+                elif filter_period == "전체 누적": in_period = True
+                
+                if in_period:
+                    if "신규 등록" in h_reason:
+                        cnt_new += 1
+                        if h_name in staff_stats: staff_stats[h_name]["신규등록"] += 1
+                    elif "과거 DB 갱신" in h_reason:
+                        cnt_renew += 1
                         
+        # 2. '수정 완료' 및 '비공개' 카운팅 (수정요청 시트 기준)
         for r in req_all_values[1:]:
-            req_date = str(r[0])
-            req_user = str(r[1])
-            req_stat = str(r[5])
+            req_date, req_user, req_stat = str(r[0]), str(r[1]), str(r[5])
             
             in_period = False
             if filter_period == "이번 달" and this_month_str in req_date: in_period = True
             elif filter_period == "올해 누적" and this_year_str in req_date: in_period = True
             elif filter_period == "전체 누적": in_period = True
             
-            if in_period and req_user in staff_stats:
-                staff_stats[req_user]["오류제보"] += 1
-                if req_stat in ["처리완료", "비공개"]: 
-                    staff_stats[req_user]["살려낸DB"] += 1
+            if in_period:
+                if req_stat == "처리완료":
+                    cnt_req_ok += 1
+                    if req_user in staff_stats: 
+                        staff_stats[req_user]["오류제보"] += 1
+                        staff_stats[req_user]["살려낸DB"] += 1
+                elif req_stat == "비공개":
+                    cnt_req_hide += 1
+                    if req_user in staff_stats: 
+                        staff_stats[req_user]["오류제보"] += 1
+                        staff_stats[req_user]["살려낸DB"] += 1
 
-        # 💡 신규 등록 건수와 갱신(승인/살려낸) 건수를 개별 합산
-        total_new = sum(stat["신규등록"] for stat in staff_stats.values())
-        total_renew = sum(stat["살려낸DB"] for stat in staff_stats.values())
-
-        st.markdown("##### 📊 DB 자산 증식 현황")
-        # 💡 두 개의 수치를 나란히 분리해서 표시
-        colA, colB = st.columns(2)
-        colA.metric(f"[{filter_period}] 신규 등록 매물", f"{total_new} 건")
-        colB.metric(f"[{filter_period}] 갱신 및 승인된 매물", f"{total_renew} 건")
+        st.markdown("##### 📊 엘루이 DB 자산 통계 (중복 제거됨)")
+        # 💡 4가지 지표를 명확하게 분리해서 화면에 띄웁니다
+        colA, colB, colC, colD = st.columns(4)
+        colA.metric(f"[{filter_period}] 🆕 신규 등록", f"{cnt_new} 건")
+        colB.metric(f"[{filter_period}] 🔄 단순 갱신", f"{cnt_renew} 건")
+        colC.metric(f"[{filter_period}] 🛠️ 수정 승인", f"{cnt_req_ok} 건")
+        colD.metric(f"[{filter_period}] 🔒 비공개 처리", f"{cnt_req_hide} 건")
         st.write("---")
         
         st.markdown("##### 🏆 직원별 기여도 랭킹 (5:3:1 점수제)")

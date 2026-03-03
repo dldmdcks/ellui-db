@@ -18,13 +18,13 @@ st.markdown("""
         /* 버튼 크기 및 여백 축소 */
         .stButton>button { padding: 0.2rem 0.5rem; min-height: 2rem; }
         
-        /* 💡 컨테이너 상단 여백 복구 (탭 글씨 잘림 방지) */
+        /* 컨테이너 상단 여백 복구 (탭 글씨 잘림 방지) */
         .block-container { padding-top: 3.5rem; padding-bottom: 2rem; }
         
         /* 사이드바 크기 조정 */
         [data-testid="stSidebar"] { width: 280px !important; }
         
-        /* 💡 탭 글자 크기 및 높이 확보 */
+        /* 탭 글자 크기 및 높이 확보 */
         button[data-baseweb="tab"] > div[data-testid="stMarkdownContainer"] > p { font-size: 15px; margin-bottom: 0px; }
         button[data-baseweb="tab"] { height: 3rem; }
     </style>
@@ -223,20 +223,31 @@ for i, r in enumerate(all_records_raw):
 all_records = list(temp_dict.values())
 all_records.reverse()
 
-# --- 💡 사이드바 (가이드라인 폰트 확대) ---
+# --- 💡 사이드바 (가이드라인 줄바꿈 및 폰트 개선) ---
 st.sidebar.markdown(f"### 👤 {user_name}")
 
 # 내 토큰 표시
 st.sidebar.markdown(f"**보유 토큰:** `{user_tokens} 개`")
-# 💡 CSS로 글자 크기와 색상을 명확하게 지정하여 한 단계 더 키움
-st.sidebar.markdown("<p style='font-size: 13px; color: #4a4a4a; margin-top: -10px;'>👉 신규 매물 등록 +3  |  오류 제보 승인 +1</p>", unsafe_allow_html=True)
+# CSS로 줄바꿈 및 글자 크기, 마진 조절
+st.sidebar.markdown("""
+<div style='font-size: 13px; color: #4a4a4a; margin-top: -5px;'>
+    👉 신규 매물 등록 <b>+3</b><br>
+    👉 오류 제보 승인 <b>+1</b>
+</div>
+""", unsafe_allow_html=True)
 
 st.sidebar.write("") # 여백
 
 # 내 기여도 표시
 st.sidebar.markdown(f"**이번 달 기여도:** `{my_month_score} 점`")
-# 💡 CSS로 글자 크기와 색상을 명확하게 지정
-st.sidebar.markdown("<p style='font-size: 13px; color: #4a4a4a; margin-top: -10px;'>🏆 신규등록 5점 | 오류제보 3점 | 정보갱신 1점</p>", unsafe_allow_html=True)
+# CSS로 줄바꿈 및 글자 크기 조절
+st.sidebar.markdown("""
+<div style='font-size: 13px; color: #4a4a4a; margin-top: -5px;'>
+    🏆 신규등록 <b>5점</b><br>
+    🏆 오류제보 <b>3점</b><br>
+    🏆 정보갱신 <b>1점</b>
+</div>
+""", unsafe_allow_html=True)
 
 st.sidebar.write("---")
 
@@ -295,7 +306,8 @@ with tabs[0]:
         st.caption(f"검색 결과: {len(st.session_state.addr_search_res)}건")
         
         for idx, row in enumerate(st.session_state.addr_search_res):
-            addr, room, name, birth, phone, deposit, rent, end_date, _, _, memo, reg_date, registrar, status, row_idx = row
+            # 💡 건물 용도(b_type) 추가
+            addr, room, name, birth, phone, deposit, rent, end_date, _, b_type, memo, reg_date, registrar, status, row_idx = row
             
             manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if b in addr), None)
             is_manager_locked = manager_name and manager_name != user_name and user_email != ADMIN_EMAIL
@@ -344,7 +356,8 @@ with tabs[0]:
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
                 
                 if st.session_state.get(toggle_key, False):
-                    st.info(f"**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent} | **만기:** {end_date}\n\n**특이사항:** {memo}")
+                    # 💡 상세 정보에 건물 용도 추가
+                    st.info(f"**용도:** {b_type}\n\n**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent} | **만기:** {end_date}\n\n**특이사항:** {memo}")
                     
                     if "2020-" in str(reg_date):
                         if st.button("✅ 현 소유주 일치 확인 (최신 DB로 갱신)", key=f"upd_2020_{idx}"):
@@ -393,7 +406,7 @@ with tabs[1]:
     if st.session_state.owner_search_res is not None:
         st.caption(f"검색 결과: {len(st.session_state.owner_search_res)}건")
         for idx, row in enumerate(st.session_state.owner_search_res):
-            addr, room, name, birth, phone, deposit, rent, end_date, _, _, memo, reg_date, registrar, status, row_idx = row
+            addr, room, name, birth, phone, deposit, rent, end_date, _, b_type, memo, reg_date, registrar, status, row_idx = row
             
             manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if b in addr), None)
             is_manager_locked = manager_name and manager_name != user_name and user_email != ADMIN_EMAIL
@@ -435,7 +448,8 @@ with tabs[1]:
                 if st.button("🔓 재열람가능", key=f"btn_re_own_{idx}"):
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
                 if st.session_state.get(toggle_key, False):
-                    st.info(f"**연락처:** {phone} | **만기/보증/월세:** {end_date} / {deposit} / {rent}\n\n**특이사항:** {memo}")
+                    # 💡 소유주 검색 쪽 상세 정보에도 용도 추가
+                    st.info(f"**용도:** {b_type}\n\n**연락처:** {phone} | **만기/보증/월세:** {end_date} / {deposit} / {rent}\n\n**특이사항:** {memo}")
                     
                     if "2020-" in str(reg_date):
                         if st.button("✅ 현 소유주 일치 확인 (갱신)", key=f"upd_2020_own_{idx}"):
@@ -527,7 +541,7 @@ if user_email == ADMIN_EMAIL:
         filter_period = st.radio("통계 기간 선택", ["이번 달", "올해 누적", "전체 누적"], horizontal=True)
         
         staff_stats = {r['이름']: {"신규등록": 0, "오류제보": 0, "살려낸DB": 0} for r in staff_records}
-        new_db_cnt, up_db_cnt, del_db_cnt = 0, 0, 0
+        new_db_cnt, up_db_cnt = 0, 0
         
         for r in all_records_raw:
             reg = str(r[11]) if len(r) > 11 else ""
@@ -540,10 +554,8 @@ if user_email == ADMIN_EMAIL:
             elif filter_period == "전체 누적": in_period = True
             
             if in_period:
-                if stat == "잘못됨": 
-                    del_db_cnt += 1
-                elif "2020-" not in reg:
-                    new_db_cnt += 1
+                if stat != "잘못됨" and "2020-" not in reg:
+                    new_db_cnt += 1 # 💡 신규 및 갱신된(활성화) DB 총합
                     if registrar in staff_stats:
                         staff_stats[registrar]["신규등록"] += 1
                         
@@ -563,9 +575,8 @@ if user_email == ADMIN_EMAIL:
                     staff_stats[req_user]["살려낸DB"] += 1
 
         st.markdown("##### 📊 DB 자산 증식 현황")
-        colA, colB, colC = st.columns(3)
-        colA.metric(f"[{filter_period}] 확보/갱신된 DB", f"{new_db_cnt} 건")
-        colB.metric(f"[{filter_period}] 걸러낸 썩은 DB", f"{del_db_cnt} 건", delta="블랙리스트", delta_color="inverse")
+        # 💡 삭제 수치(걸러낸 DB) 제거 후 신규/갱신 DB 현황만 표시
+        st.metric(f"[{filter_period}] 신규 확보 및 갱신된 DB", f"{new_db_cnt} 건")
         st.write("---")
         
         st.markdown("##### 🏆 직원별 기여도 랭킹 (5:3:1 점수제)")

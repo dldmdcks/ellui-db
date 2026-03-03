@@ -8,11 +8,26 @@ import urllib.parse
 import re
 import pandas as pd
 
-# 1. 웹사이트 기본 설정
+# --- 💡 1. UI 다이어트: 전체 폰트 크기 및 여백 축소 (CSS 주입) ---
 st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="wide")
+st.markdown("""
+    <style>
+        /* 전체 폰트 크기 축소 */
+        html, body, [class*="css"]  { font-size: 14px !important; }
+        /* 버튼 크기 및 여백 축소 */
+        .stButton>button { padding: 0.2rem 0.5rem; min-height: 2rem; }
+        /* 컨테이너 여백 축소 */
+        .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+        /* 사이드바 크기 조정 */
+        [data-testid="stSidebar"] { width: 280px !important; }
+        /* 탭 글자 크기 축소 */
+        button[data-baseweb="tab"] > div[data-testid="stMarkdownContainer"] > p { font-size: 15px; }
+    </style>
+""", unsafe_allow_html=True)
+
 ADMIN_EMAIL = "dldmdcks94@gmail.com"
 
-# 2. 로그인 및 DB 연결 설정
+# 2. 로그인 및 DB 연결 설정 (변경 없음)
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
     token_dict = json.loads(st.secrets["google_token_json"])
@@ -23,7 +38,6 @@ except Exception:
     st.error("❌ 금고 설정(Secrets)을 확인해주세요.")
     st.stop()
 
-# 새로고침(F5) 로그아웃 방지 로직
 if 'connected' not in st.session_state: 
     st.session_state.connected = False
 
@@ -57,7 +71,7 @@ if not st.session_state.connected:
     st.link_button("🔵 Google 계정으로 로그인", login_url, type="primary", use_container_width=True)
     st.stop()
 
-# 3. 데이터베이스 연동 및 시트 객체 생성
+# 3. 데이터베이스 연동 및 시트 객체 생성 (변경 없음)
 @st.cache_resource
 def get_ss():
     creds = Credentials.from_authorized_user_info(token_dict)
@@ -81,14 +95,13 @@ except:
     ws_history = ss.add_worksheet(title="토큰내역", rows="100", cols="5")
     ws_history.append_row(["일시", "직원명", "변동량", "잔여토큰", "사유_상세"])
 
-# --- 💡 트래픽 방어: 데이터 캐싱 (1분마다 갱신 또는 변경 시 갱신) ---
+# 트래픽 방어: 데이터 캐싱 (1분 갱신)
 @st.cache_data(ttl=60)
 def fetch_all_data():
     return ws_data.get_all_values(), ws_staff.get_all_records(), ws_request.get_all_values(), ws_history.get_all_values()
 
 all_data_raw, staff_records, req_all_values, history_all_values = fetch_all_data()
 
-# 권한 체크 및 사용자 매핑
 staff_dict = {str(row['이메일']).strip(): row for row in staff_records}
 ALLOWED_USERS = [ADMIN_EMAIL] + list(staff_dict.keys())
 
@@ -106,7 +119,6 @@ else:
 
 history_records = history_all_values[1:]
 
-# --- 💡 전담 관리 건물 매핑 ---
 MANAGER_BUILDINGS = {}
 for r in staff_records:
     buildings = str(r.get('관리건물', '')).split(',')
@@ -114,7 +126,6 @@ for r in staff_records:
         b = b.strip()
         if b: MANAGER_BUILDINGS[b] = r['이름']
 
-# --- 헬퍼 함수 모음 ---
 def clean_numeric(text): return re.sub(r'[^0-9]', '', str(text))
 def clean_bunji(text): return re.sub(r'[^0-9-]', '', str(text))
 def extract_room_number(room_str):
@@ -142,7 +153,7 @@ def update_token(amount, reason):
     if staff_row_index:
         ws_staff.update_cell(staff_row_index, 4, new_token_val)
     ws_history.append_row([now, user_name, amount, new_token_val, reason])
-    st.cache_data.clear() # 캐시 초기화 (트래픽 방어용)
+    st.cache_data.clear()
     st.cache_resource.clear()
 
 def is_unlocked_recently(addr, room):
@@ -157,12 +168,10 @@ def is_unlocked_recently(addr, room):
             except: continue
     return False
 
-# --- 💡 수정요청 중인 매물 파악 (Lock 용도) ---
 pending_reqs_with_idx = [(i+1, r) for i, r in enumerate(req_all_values) if i > 0 and len(r) > 5 and r[5] == '대기중']
 pending_req_count = len(pending_reqs_with_idx)
 pending_set = {(r[2], r[3]) for _, r in pending_reqs_with_idx}
 
-# --- 💡 메인 DB 가져오기 & 최신 데이터 필터링(중복 제거) ---
 all_records_raw = all_data_raw[1:]
 temp_dict = {}
 
@@ -170,7 +179,6 @@ for i, r in enumerate(all_records_raw):
     row_idx = i + 2 
     status = r[13].strip() if len(r) > 13 else "정상"
     
-    # 일반 직원은 '비공개'와 '잘못됨(삭제)' 매물을 아예 못 봄
     if user_email != ADMIN_EMAIL and status in ["비공개", "삭제", "잘못됨"]:
         continue
         
@@ -190,15 +198,25 @@ st.sidebar.metric(label="내 보유 토큰", value=f"{user_tokens} 개")
 st.sidebar.caption("💡 매달 기여도에 따라서 토큰 지급")
 st.sidebar.write("---")
 
-with st.sidebar.expander("📜 내 토큰 이용 내역"):
-    my_history = [r for r in history_records if r[1] == user_name]
-    if my_history:
-        df_my_hist = pd.DataFrame(my_history, columns=["일시", "직원명", "변동", "잔여", "사유"])
-        st.dataframe(df_my_hist[["일시", "변동", "사유"]].tail(10).iloc[::-1], hide_index=True)
-    else: st.write("내역이 없습니다.")
-
-if user_email == ADMIN_EMAIL and pending_req_count > 0:
-    st.sidebar.error(f"🚨 대기중인 수정 요청: {pending_req_count}건")
+# --- 💡 2. 관리자용 전체 토큰 감시망 & 실시간 알림 ---
+if user_email == ADMIN_EMAIL:
+    if pending_req_count > 0:
+        # 관리자는 왼쪽에서 항상 알림을 봄
+        st.sidebar.error(f"🚨 대기 중인 수정 요청: {pending_req_count}건")
+        st.sidebar.write("---")
+        
+    with st.sidebar.expander("👁️ 전체 직원 토큰 내역 (관리자용)"):
+        if history_records:
+            df_hist = pd.DataFrame(history_records, columns=["일시", "직원명", "변동", "잔여", "사유"])
+            st.dataframe(df_hist[["일시", "직원명", "변동", "사유"]].tail(15).iloc[::-1], hide_index=True)
+        else: st.write("내역이 없습니다.")
+else:
+    with st.sidebar.expander("📜 내 토큰 이용 내역"):
+        my_history = [r for r in history_records if r[1] == user_name]
+        if my_history:
+            df_my_hist = pd.DataFrame(my_history, columns=["일시", "직원명", "변동", "잔여", "사유"])
+            st.dataframe(df_my_hist[["일시", "변동", "사유"]].tail(10).iloc[::-1], hide_index=True)
+        else: st.write("내역이 없습니다.")
 
 st.sidebar.write("---")
 if st.sidebar.button("로그아웃"):
@@ -227,7 +245,6 @@ with tabs[0]:
             and (b.replace(" ","") in r[0].replace(" ",""))
             and (r_search in r[1])
         ]
-        # 💡 호수 기준 오름차순(낮은 층부터) 칼각 정렬
         res.sort(key=lambda x: extract_room_number(x[1]))
         st.session_state.addr_search_res = res
     
@@ -237,17 +254,14 @@ with tabs[0]:
         for idx, row in enumerate(st.session_state.addr_search_res):
             addr, room, name, birth, phone, deposit, rent, end_date, _, _, memo, reg_date, registrar, status, row_idx = row
             
-            # 관리 건물 체크
             manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if b in addr), None)
             is_manager_locked = manager_name and manager_name != user_name and user_email != ADMIN_EMAIL
             
-            # 상태 및 태그 설정
             status_text = f" 🚨[{status}]" if status in ["비공개", "잘못됨", "삭제"] else ""
             old_tag = " | 🗄️ 기존 누적 DB" if "2020-" in str(reg_date) else ""
             m_tag = f" | 👑 {manager_name} 관리매물" if manager_name else ""
             hash_tags = extract_tags(memo)
             
-            # UI 다이어트: 얇은 한 줄 출력
             st.markdown(f"**📍 {addr} | {room}{old_tag}{status_text}{m_tag}**")
             if hash_tags: st.caption(f"✨ {hash_tags}")
             
@@ -283,7 +297,6 @@ with tabs[0]:
                                 st.success("제보 완료! 승인 시 토큰 지급")
                                 st.rerun()
             elif is_unlocked:
-                # 💡 아코디언 방식 (재열람)
                 if st.button("🔓 재열람가능", key=f"btn_re_{idx}"):
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
                 
@@ -303,7 +316,7 @@ with tabs[0]:
                     if user_tokens >= 1:
                         update_token(-1, f"매물 열람 ({addr} {room})")
                         st.session_state[unlock_key] = True
-                        st.session_state[toggle_key] = True # 열람 즉시 펼치기
+                        st.session_state[toggle_key] = True 
                         st.rerun()
                     else: st.error("토큰이 부족합니다.")
             st.write("---")
@@ -401,6 +414,7 @@ with tabs[2]:
             f_end_date = st.text_input("현 만기일", placeholder="2026-05-30")
         f_memo = st.text_area("특이사항")
         
+        # 💡 3. 즉각적인 시트 반영 및 화면 업데이트 (캐시 초기화)
         if st.form_submit_button("💾 데이터 등록", type="primary", use_container_width=True):
             if not f_room.isdigit() or not f_birth.isdigit() or not f_phone.isdigit():
                 st.error("⚠️ 호실, 생년월일, 연락처는 숫자만 입력하세요.")
@@ -410,7 +424,6 @@ with tabs[2]:
                 full_addr = f"{f_city} {f_gu} {f_dong} {clean_bunji(f_bunji)}"
                 room_final = f"{f_sub_dong}동 {f_room}호" if f_sub_dong != "0" else f"{f_room}호"
                 
-                # '잘못됨(삭제)'이나 '비공개'가 아닌 정상 매물 중에 중복이 있는지 검사
                 duplicate = [r for r in all_records if r[0] == full_addr and r[1] == room_final and r[12] == user_name and r[13] == "정상"]
                 if duplicate:
                     st.error(f"❌ 이미 등록된 정상 매물입니다!")
@@ -419,6 +432,7 @@ with tabs[2]:
                     new_row = [full_addr, room_final, f_name, f_birth, format_phone(f_phone), f_deposit, f_rent, f_end_date, "", "미분류", f_memo, now, user_name, "정상"]
                     ws_data.append_row(new_row)
                     update_token(1, f"신규 등록 ({full_addr} {room_final})")
+                    st.cache_data.clear() # 강제 동기화: 다음 검색 시 즉시 노출
                     st.success("✅ 등록 완료! 토큰 +1 💰")
                     st.rerun()
 
@@ -431,33 +445,66 @@ if user_email == ADMIN_EMAIL:
             st.cache_data.clear()
             st.rerun()
             
-        # 💡 통계 대시보드 계산 로직
+        # 💡 4. 기간별 필터 및 상세 기여도 리더보드
         now_date = datetime.now()
         this_month_str = now_date.strftime("%Y-%m")
         this_year_str = now_date.strftime("%Y")
         
-        new_db_m, up_db_m, del_db_m = 0, 0, 0
-        new_db_y, up_db_y, del_db_y = 0, 0, 0
+        filter_period = st.radio("통계 기간 선택", ["이번 달", "올해 누적", "전체 누적"], horizontal=True)
+        
+        # 직원별 실적 집계용 딕셔너리
+        staff_stats = {r['이름']: {"신규등록": 0, "오류제보": 0, "살려낸DB": 0} for r in staff_records}
+        
+        new_db_cnt, up_db_cnt, del_db_cnt = 0, 0, 0
         
         for r in all_records_raw:
             reg = str(r[11]) if len(r) > 11 else ""
             stat = str(r[13]) if len(r) > 13 else "정상"
+            registrar = str(r[12]) if len(r) > 12 else ""
             
-            if stat == "잘못됨": 
-                if this_month_str in reg: del_db_m += 1
-                if this_year_str in reg: del_db_y += 1
-            elif "2020-" not in reg:
-                # 2020년이 아닌 최근 데이터
-                if this_month_str in reg: new_db_m += 1
-                if this_year_str in reg: new_db_y += 1
+            in_period = False
+            if filter_period == "이번 달" and this_month_str in reg: in_period = True
+            elif filter_period == "올해 누적" and this_year_str in reg: in_period = True
+            elif filter_period == "전체 누적": in_period = True
+            
+            if in_period:
+                if stat == "잘못됨": 
+                    del_db_cnt += 1
+                elif "2020-" not in reg:
+                    new_db_cnt += 1
+                    if registrar in staff_stats:
+                        staff_stats[registrar]["신규등록"] += 1
+                        
+        # 요청 내역(제보/수정) 집계
+        for r in req_all_values[1:]:
+            req_date = str(r[0])
+            req_user = str(r[1])
+            req_stat = str(r[5])
+            
+            in_period = False
+            if filter_period == "이번 달" and this_month_str in req_date: in_period = True
+            elif filter_period == "올해 누적" and this_year_str in req_date: in_period = True
+            elif filter_period == "전체 누적": in_period = True
+            
+            if in_period and req_user in staff_stats:
+                staff_stats[req_user]["오류제보"] += 1
+                if req_stat == "처리완료":
+                    staff_stats[req_user]["살려낸DB"] += 1
 
         st.markdown("##### 📊 DB 자산 증식 현황")
         colA, colB, colC = st.columns(3)
-        colA.metric("이번 달 확보/갱신된 DB", f"{new_db_m} 건")
-        colB.metric("올해 누적 확보/갱신", f"{new_db_y} 건")
-        colC.metric("이번 달 걸러낸 썩은 DB", f"{del_db_m} 건", delta="블랙리스트", delta_color="inverse")
+        colA.metric(f"[{filter_period}] 확보/갱신된 DB", f"{new_db_cnt} 건")
+        colB.metric(f"[{filter_period}] 걸러낸 썩은 DB", f"{del_db_cnt} 건", delta="블랙리스트", delta_color="inverse")
         st.write("---")
+        
+        st.markdown("##### 🏆 직원별 기여도 랭킹")
+        df_stats = pd.DataFrame.from_dict(staff_stats, orient='index').reset_index()
+        df_stats.columns = ["직원명", "신규 등록 건수", "오류 제보 건수", "승인(살려낸) 건수"]
+        df_stats["총 기여도"] = df_stats["신규 등록 건수"] + df_stats["승인(살려낸) 건수"]
+        df_stats = df_stats.sort_values(by="총 기여도", ascending=False)
+        st.dataframe(df_stats, use_container_width=True, hide_index=True)
 
+        st.write("---")
         st.write("#### 🚨 직원 수정 요청 처리")
         if pending_reqs_with_idx:
             for row_idx, r_req in pending_reqs_with_idx:
@@ -467,11 +514,10 @@ if user_email == ADMIN_EMAIL:
                     
                     if cA.button("✅ 수정 완료 (최신화)", key=f"ok_{row_idx}"):
                         ws_request.update_cell(row_idx, 6, "처리완료")
-                        # 승인 시 메인 DB의 해당 매물 날짜를 오늘로 갱신 (부활)
                         for m_idx, m_row in enumerate(all_records_raw):
                             if m_row[0] == r_req[2] and m_row[1] == r_req[3]:
                                 ws_data.update_cell(m_idx + 2, 12, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-                        st.cache_data.clear()
+                        st.cache_data.clear() # 처리 즉시 동기화
                         st.rerun()
                         
                     if cB.button("🔒 비공개 (숨김)", key=f"hide_{row_idx}"):
@@ -484,7 +530,6 @@ if user_email == ADMIN_EMAIL:
                         
                     if cC.button("🗑️ 영구 삭제 (잘못됨)", key=f"del_{row_idx}"):
                         ws_request.update_cell(row_idx, 6, "삭제")
-                        # 블랙리스트 처리하여 직원망에서 차단, 재등록 방지
                         for m_idx, m_row in enumerate(all_records_raw):
                             if m_row[0] == r_req[2] and m_row[1] == r_req[3]:
                                 ws_data.update_cell(m_idx + 2, 14, "잘못됨")

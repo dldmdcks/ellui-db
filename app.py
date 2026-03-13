@@ -308,7 +308,7 @@ with tabs[0]:
         for idx, row in enumerate(st.session_state.addr_search_res):
             addr, room, name, birth, phone, deposit, rent, end_date, _, b_type, memo, reg_date, registrar, status, row_idx = row
             
-            manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if b in addr), None)
+            manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if f" {b} " in f" {addr} "), None)
             is_manager_locked = manager_name and manager_name != user_name and user_email != ADMIN_EMAIL
             
             status_text = f" 🚨[{status}]" if status in ["비공개", "잘못됨", "삭제"] else ""
@@ -407,7 +407,7 @@ with tabs[1]:
         for idx, row in enumerate(st.session_state.owner_search_res):
             addr, room, name, birth, phone, deposit, rent, end_date, _, b_type, memo, reg_date, registrar, status, row_idx = row
             
-            manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if b in addr), None)
+            manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if f" {b} " in f" {addr} "), None)
             is_manager_locked = manager_name and manager_name != user_name and user_email != ADMIN_EMAIL
             status_text = f" 🚨[{status}]" if status in ["비공개", "잘못됨", "삭제"] else ""
             m_tag = f" | 👑 {manager_name} 관리매물" if manager_name else ""

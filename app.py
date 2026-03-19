@@ -204,7 +204,7 @@ for r in req_all_values[1:]:
     req_stat = str(r[5])
     if req_user == user_name and this_month_str in req_date:
         my_month_score += 3 # 제보 3점
-        if req_stat == "처리완료": my_month_score += 1 # 갱신(승인) 시 추가 1점
+        if req_stat in ["처리완료", "자동처리"]: my_month_score += 1 # 갱신(승인/자동처리) 시 추가 1점
 
 for i, r in enumerate(all_records_raw):
     row_idx = i + 2 
@@ -344,11 +344,17 @@ with tabs[0]:
                 if st.session_state.get(toggle_key, False):
                     with st.form(f"report_{idx}", clear_on_submit=True):
                         new_phone = st.text_input("알아낸 진짜 연락처 입력")
-                        if st.form_submit_button("🏆 제보하고 토큰받기"):
+                        if st.form_submit_button("🏆 제보하고 자동 반영 (토큰+1)"):
                             if new_phone:
-                                ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, f"[제보] {new_phone}", "대기중"])
+                                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                ws_data.update_cell(row_idx, 14, "비공개")
+                                new_row = [addr, room, name, birth, format_phone(new_phone), deposit, rent, end_date, "", b_type, memo, now_str, user_name, "정상"]
+                                ws_data.append_row(new_row)
+                                ws_request.append_row([now_str, user_name, addr, room, f"[연락처 갱신] {new_phone}", "자동처리"])
+                                update_token(user_name, 1, f"연락처 자동 반영 ({addr} {room})")
+                                
                                 st.cache_data.clear()
-                                st.success("제보 완료! 승인 시 토큰 1개 지급")
+                                st.success("✅ 연락처가 최신화되고 토큰이 지급되었습니다!")
                                 st.rerun()
             elif is_unlocked:
                 if st.button("🔓 재열람가능", key=f"btn_re_{idx}"):
@@ -367,18 +373,27 @@ with tabs[0]:
                             st.rerun()
                             
                     with st.form(f"edit_addr_{idx}", clear_on_submit=True):
-                        edit_memo = st.text_input("수정 요청 사유 (예: 번호오류)")
+                        edit_memo = st.text_input("수정 요청 내용 (예: 보증금 2천으로 변경됨)")
                         call_date = st.text_input("확인 통화일 (예: 3월 3일 오후 2시)")
                         
-                        if st.form_submit_button("🛠️ 수정요청하기"):
+                        if st.form_submit_button("🛠️ 데이터 수정 자동 반영"):
                             if edit_memo and call_date:
+                                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                 full_reason = f"[{call_date} 통화] {edit_memo}"
-                                ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, full_reason, "대기중"])
+                                
+                                ws_data.update_cell(row_idx, 14, "비공개")
+                                new_memo = f"{memo}\n👉 변경사항: {full_reason}".strip()
+                                new_row = [addr, room, name, birth, phone, deposit, rent, end_date, "", b_type, new_memo, now_str, user_name, "정상"]
+                                ws_data.append_row(new_row)
+                                
+                                ws_request.append_row([now_str, user_name, addr, room, full_reason, "자동처리"])
+                                update_token(user_name, 1, f"정보 자동 수정 ({addr} {room})")
+                                
                                 st.cache_data.clear()
-                                st.success("요청 전송 완료! 승인 시 토큰 1개 지급")
+                                st.success("✅ 데이터가 갱신되고 기존 내역은 비공개로 보존됩니다! (토큰 +1)")
                                 st.rerun()
                             else:
-                                st.warning("사유와 통화일을 모두 입력해주세요.")
+                                st.warning("수정 내용과 통화일을 모두 입력해주세요.")
             else:
                 if st.button("🔓 상세정보 열람 (토큰 1개)", key=f"btn_addr_{idx}"):
                     if user_tokens >= 1:
@@ -437,11 +452,16 @@ with tabs[1]:
                 if st.session_state.get(toggle_key, False):
                     with st.form(f"report_own_{idx}", clear_on_submit=True):
                         new_phone = st.text_input("진짜 연락처 입력")
-                        if st.form_submit_button("🏆 제보하고 토큰받기"):
+                        if st.form_submit_button("🏆 제보하고 자동 반영 (토큰+1)"):
                             if new_phone:
-                                ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, f"[제보] {new_phone}", "대기중"])
+                                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                ws_data.update_cell(row_idx, 14, "비공개")
+                                new_row = [addr, room, name, birth, format_phone(new_phone), deposit, rent, end_date, "", b_type, memo, now_str, user_name, "정상"]
+                                ws_data.append_row(new_row)
+                                ws_request.append_row([now_str, user_name, addr, room, f"[연락처 갱신] {new_phone}", "자동처리"])
+                                update_token(user_name, 1, f"연락처 자동 반영 ({addr} {room})")
                                 st.cache_data.clear()
-                                st.success("제보 완료!")
+                                st.success("✅ 연락처 최신화 완료!")
                                 st.rerun()
             elif is_unlocked:
                 if st.button("🔓 재열람가능", key=f"btn_re_own_{idx}"):
@@ -459,18 +479,27 @@ with tabs[1]:
                             st.rerun()
 
                     with st.form(f"edit_own_{idx}", clear_on_submit=True):
-                        edit_memo = st.text_input("사유")
-                        call_date = st.text_input("확인 통화일")
+                        edit_memo = st.text_input("수정 요청 내용 (예: 보증금 2천으로 변경됨)")
+                        call_date = st.text_input("확인 통화일 (예: 3월 3일 오후 2시)")
                         
-                        if st.form_submit_button("🛠️ 수정요청하기"):
+                        if st.form_submit_button("🛠️ 데이터 수정 자동 반영"):
                             if edit_memo and call_date:
+                                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                 full_reason = f"[{call_date} 통화] {edit_memo}"
-                                ws_request.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, addr, room, full_reason, "대기중"])
+                                
+                                ws_data.update_cell(row_idx, 14, "비공개")
+                                new_memo = f"{memo}\n👉 변경사항: {full_reason}".strip()
+                                new_row = [addr, room, name, birth, phone, deposit, rent, end_date, "", b_type, new_memo, now_str, user_name, "정상"]
+                                ws_data.append_row(new_row)
+                                
+                                ws_request.append_row([now_str, user_name, addr, room, full_reason, "자동처리"])
+                                update_token(user_name, 1, f"정보 자동 수정 ({addr} {room})")
+                                
                                 st.cache_data.clear()
-                                st.success("요청 완료!")
+                                st.success("✅ 데이터가 갱신되고 기존 내역은 비공개로 보존됩니다! (토큰 +1)")
                                 st.rerun()
                             else:
-                                st.warning("사유와 통화일을 입력해주세요.")
+                                st.warning("수정 내용과 통화일을 입력해주세요.")
             else:
                 if st.button("🔓 상세정보 열람 (토큰 1개)", key=f"btn_own_{idx}"):
                     if user_tokens >= 1:
@@ -485,7 +514,6 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("📝 신규 등록 (완료 시 +3 토큰 / +5점)")
     
-    # 💡 폼 데이터를 세션 상태(session_state)에 저장하여 날아가는 현상 방지
     if "reg_city" not in st.session_state: st.session_state.reg_city = "서울"
     if "reg_dong" not in st.session_state: st.session_state.reg_dong = ""
     if "reg_bunji" not in st.session_state: st.session_state.reg_bunji = ""
@@ -500,12 +528,10 @@ with tabs[2]:
     if "reg_end_date" not in st.session_state: st.session_state.reg_end_date = ""
     if "reg_memo" not in st.session_state: st.session_state.reg_memo = ""
 
-    # 💡 clear_on_submit=False 로 설정하여 제출 시 폼이 비워지지 않게 합니다
     with st.form("reg_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
             st.session_state.reg_city = st.text_input("시/도", st.session_state.reg_city)
-            # 💡 (필수) 로 변경
             st.session_state.reg_dong = st.text_input("읍/면/동 (필수)", value=st.session_state.reg_dong, placeholder="방이동")
             st.session_state.reg_bunji = st.text_input("번지 (필수)", value=st.session_state.reg_bunji, placeholder="28-2")
             st.session_state.reg_sub_dong = st.text_input("번지 뒤 '동' (없으면 0)", value=st.session_state.reg_sub_dong)
@@ -522,9 +548,7 @@ with tabs[2]:
         
         submit_btn = st.form_submit_button("💾 데이터 등록", type="primary", use_container_width=True)
 
-    # 💡 버튼 밖에서 입력 검증을 수행하고, 실패 시 에러만 띄우고 데이터는 유지합니다.
     if submit_btn:
-        # 값을 지역 변수로 가져오기
         f_dong = st.session_state.reg_dong
         f_bunji = st.session_state.reg_bunji
         f_room = st.session_state.reg_room
@@ -532,7 +556,6 @@ with tabs[2]:
         f_birth = st.session_state.reg_birth
         f_phone = st.session_state.reg_phone
 
-        # 💡 빨간색 경고 메시지를 해당 칸 아래에 직관적으로 표시
         has_error = False
         
         if not f_dong or not f_bunji or not f_name or not f_room or not f_birth or not f_phone:
@@ -552,7 +575,6 @@ with tabs[2]:
             has_error = True
 
         if not has_error:
-            # 에러가 없을 때만 DB에 등록 프로세스 진행
             full_addr = f"{st.session_state.reg_city} {st.session_state.reg_gu} {f_dong} {clean_bunji(f_bunji)}"
             room_final = f"{st.session_state.reg_sub_dong}동 {f_room}호" if st.session_state.reg_sub_dong != "0" else f"{f_room}호"
             
@@ -566,7 +588,6 @@ with tabs[2]:
                 
                 update_token(user_name, 3, f"신규 등록 ({full_addr} {room_final})")
                 
-                # 💡 성공적으로 등록되었을 때만 세션을 비워서 폼을 초기화합니다.
                 for key in ["reg_dong", "reg_bunji", "reg_room", "reg_name", "reg_birth", "reg_phone", "reg_deposit", "reg_rent", "reg_end_date", "reg_memo"]:
                     st.session_state[key] = ""
                 st.session_state.reg_sub_dong = "0"
@@ -618,7 +639,7 @@ if user_email == ADMIN_EMAIL:
             elif filter_period == "전체 누적": in_period = True
             
             if in_period:
-                if req_stat == "처리완료":
+                if req_stat in ["처리완료", "자동처리"]:
                     cnt_req_ok += 1
                     if req_user in staff_stats: 
                         staff_stats[req_user]["오류제보"] += 1
@@ -633,7 +654,7 @@ if user_email == ADMIN_EMAIL:
         colA, colB, colC, colD = st.columns(4)
         colA.metric(f"[{filter_period}] 🆕 신규 등록", f"{cnt_new} 건")
         colB.metric(f"[{filter_period}] 🔄 단순 갱신", f"{cnt_renew} 건")
-        colC.metric(f"[{filter_period}] 🛠️ 수정 승인", f"{cnt_req_ok} 건")
+        colC.metric(f"[{filter_period}] 🛠️ 수정 승인/자동반영", f"{cnt_req_ok} 건")
         colD.metric(f"[{filter_period}] 🔒 비공개 처리", f"{cnt_req_hide} 건")
         st.write("---")
         
@@ -645,7 +666,7 @@ if user_email == ADMIN_EMAIL:
         st.dataframe(df_stats, use_container_width=True, hide_index=True)
 
         st.write("---")
-        st.write("#### 🚨 직원 수정 요청 처리 (승인 시 해당 직원 토큰 +1 자동 지급)")
+        st.write("#### 🚨 직원 수정 요청 처리 (수동 승인 대기건)")
         if pending_reqs_with_idx:
             for row_idx, r_req in pending_reqs_with_idx:
                 with st.container():
@@ -679,7 +700,7 @@ if user_email == ADMIN_EMAIL:
                         st.cache_data.clear()
                         st.rerun()
                 st.write("---")
-        else: st.info("대기 중인 요청이 없습니다.")
+        else: st.info("대기 중인 수동 승인 요청이 없습니다.")
         
         st.write("---")
         st.write("#### 👥 직원 관리 및 포상")

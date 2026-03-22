@@ -32,7 +32,7 @@ st.markdown("""
 
 ADMIN_EMAIL = "dldmdcks94@gmail.com"
 
-# --- 💡 [신규 탑재] 대한민국 표준 행정구역 DB (연쇄 반응용) ---
+# --- 💡 대한민국 표준 행정구역 DB (연쇄 반응용) ---
 KOREA_REGION_DATA = {
     "서울특별시": {
         "강남구": ["개포동", "논현동", "대치동", "도곡동", "삼성동", "세곡동", "수서동", "신사동", "압구정동", "역삼동", "율현동", "일원동", "자곡동", "청담동"],
@@ -131,7 +131,7 @@ def get_ss():
     return ss
 
 ss = get_ss()
-ws_data = ss.get_worksheet_by_id(1969836502) # 새 시트 탭 연결
+ws_data = ss.get_worksheet_by_id(1969836502) 
 
 try: ws_staff = ss.worksheet("직원명단")
 except: 
@@ -148,7 +148,6 @@ except:
     ws_history = ss.add_worksheet(title="토큰내역", rows="100", cols="5")
     ws_history.append_row(["일시", "직원명", "변동량", "잔여토큰", "사유_상세"])
 
-# 트래픽 방어: 데이터 캐싱 (1분 갱신)
 @st.cache_data(ttl=60)
 def fetch_all_data():
     return ws_data.get_all_values(), ws_staff.get_all_records(), ws_request.get_all_values(), ws_history.get_all_values()
@@ -200,7 +199,6 @@ def extract_tags(memo):
     if "대출" in m: tags.append("🏦대출")
     return " ".join(tags)
 
-# 자동 토큰 지급 헬퍼 함수
 def update_token(target_name, amount, reason):
     if target_name == "이응찬 대표": return
     target_idx = None
@@ -235,7 +233,6 @@ pending_set = {(r[2], r[3]) for _, r in pending_reqs_with_idx}
 all_records_raw = all_data_raw[1:]
 temp_dict = {}
 
-# 기여도 계산을 위한 내 점수 파악 (사이드바 표시용)
 my_month_score = 0
 now_date = datetime.now()
 this_month_str = now_date.strftime("%Y-%m")
@@ -323,23 +320,17 @@ tabs_list = ["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"
 if user_email == ADMIN_EMAIL: tabs_list.append("👑 관리자 전용")
 tabs = st.tabs(tabs_list)
 
-
 # --- [탭 1] 주소 검색 ---
 with tabs[0]:
-    # 💡 Cascading(연쇄) 드롭다운을 위해 form 바깥으로 배치하여 즉각 반응하도록 설정
     c_search1, c_search2, c_search3 = st.columns([1, 1, 1])
-    
-    # 1. 시/도 선택
     sido_opts = ["전체"] + list(KOREA_REGION_DATA.keys())
     sido_idx = sido_opts.index("서울특별시") if "서울특별시" in sido_opts else 0
     sel_sido = c_search1.selectbox("시/도", sido_opts, index=sido_idx)
     
-    # 2. 시/군/구 선택 (선택된 시/도에 종속)
     gu_opts = ["전체"] + list(KOREA_REGION_DATA[sel_sido].keys()) if sel_sido != "전체" else ["전체"]
     gu_idx = gu_opts.index("송파구") if "송파구" in gu_opts else 0
     sel_sigungu = c_search2.selectbox("시/군/구", gu_opts, index=gu_idx)
     
-    # 3. 법정동 선택 (선택된 시/군/구에 종속)
     dong_opts = ["전체"] + KOREA_REGION_DATA[sel_sido][sel_sigungu] if sel_sigungu != "전체" and sel_sido != "전체" else ["전체"]
     dong_idx = dong_opts.index("방이동") if "방이동" in dong_opts else 0
     sel_dong = c_search3.selectbox("법정동", dong_opts, index=dong_idx)
@@ -358,12 +349,10 @@ with tabs[0]:
             r_sigungu = str(r[1]).strip()
             r_dong = str(r[2]).strip()
             
-            # 드롭다운 필터 완벽 검증
             match_sido = (sel_sido == "전체" or sel_sido == r_sido)
             match_sigungu = (sel_sigungu == "전체" or sel_sigungu == r_sigungu)
             match_dong = (sel_dong == "전체" or sel_dong == r_dong)
             
-            # 텍스트 입력 검증
             b_target = (f"{r[3]}-{r[4]}" if str(r[4]) != "0" else str(r[3])) + str(r[6]).replace(" ","")
             match_b = (b_search.replace(" ","") in b_target.replace(" ","")) if b_search else True
             
@@ -378,7 +367,6 @@ with tabs[0]:
     
     if st.session_state.addr_search_res is not None:
         st.caption(f"검색 결과: {len(st.session_state.addr_search_res)}건")
-        
         for idx, row in enumerate(st.session_state.addr_search_res):
             city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, reg_date, registrar, status, row_idx = row
             
@@ -388,7 +376,6 @@ with tabs[0]:
             
             manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if f" {b} " in f" {addr_str} "), None)
             is_manager_locked = manager_name and manager_name != user_name and user_email != ADMIN_EMAIL
-            
             status_text = f" 🚨[{status}]" if status in ["비공개", "잘못됨", "삭제"] else ""
             old_tag = " | 🗄️ 기존 누적 DB" if "2020-" in str(reg_date) else ""
             m_tag = f" | 👑 {manager_name} 관리매물" if manager_name else ""
@@ -412,13 +399,11 @@ with tabs[0]:
             toggle_key = f"toggle_addr_{idx}"
             is_no_phone = ("연락처 없음" in str(phone))
             free_unlock = is_unlocked_recently(addr_str, room_str)
-            
             is_unlocked = free_unlock or st.session_state.get(unlock_key, False)
             
             if is_no_phone:
                 if st.button("📞 연락처 없음 / 추가하기", key=f"btn_no_ph_{idx}"):
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
-                
                 if st.session_state.get(toggle_key, False):
                     with st.form(f"report_{idx}", clear_on_submit=True):
                         new_phone = st.text_input("알아낸 진짜 연락처 입력")
@@ -430,16 +415,14 @@ with tabs[0]:
                                 ws_data.append_row(new_row)
                                 ws_request.append_row([now_str, user_name, addr_str, room_str, f"[연락처 갱신] {new_phone}", "자동처리"])
                                 update_token(user_name, 1, f"연락처 자동 반영 ({addr_str} {room_str})")
-                                
                                 st.cache_data.clear()
                                 st.success("✅ 연락처가 최신화되고 토큰이 지급되었습니다!")
                                 st.rerun()
             elif is_unlocked:
                 if st.button("🔓 재열람가능", key=f"btn_re_{idx}"):
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
-                
                 if st.session_state.get(toggle_key, False):
-                    st.info(f"**용도:** {b_type}\n\n**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent} | **만기:** {end_date}\n\n**특이사항:** {memo}")
+                    st.info(f"**용도:** {b_type}\n\n**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent} | **만기:** {end_date}\n\n**위반여부:** {viol} | **특이사항:** {memo}")
                     
                     if "2020-" in str(reg_date):
                         if st.button("✅ 현 소유주 일치 확인 (최신 DB로 갱신)", key=f"upd_2020_{idx}"):
@@ -458,15 +441,12 @@ with tabs[0]:
                             if edit_memo and call_date:
                                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                 full_reason = f"[{call_date} 통화] {edit_memo}"
-                                
                                 ws_data.update_cell(row_idx, 26, "비공개")
                                 new_memo = f"{memo}\n👉 변경사항: {full_reason}".strip()
                                 new_row = [city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, new_memo, now_str, user_name, "정상"]
                                 ws_data.append_row(new_row)
-                                
                                 ws_request.append_row([now_str, user_name, addr_str, room_str, full_reason, "자동처리"])
                                 update_token(user_name, 1, f"정보 자동 수정 ({addr_str} {room_str})")
-                                
                                 st.cache_data.clear()
                                 st.success("✅ 데이터가 갱신되고 기존 내역은 비공개로 보존됩니다! (토큰 +1)")
                                 st.rerun()
@@ -549,7 +529,7 @@ with tabs[1]:
                 if st.button("🔓 재열람가능", key=f"btn_re_own_{idx}"):
                     st.session_state[toggle_key] = not st.session_state.get(toggle_key, False)
                 if st.session_state.get(toggle_key, False):
-                    st.info(f"**용도:** {b_type}\n\n**연락처:** {phone} | **만기/보증/월세:** {end_date} / {deposit} / {rent}\n\n**특이사항:** {memo}")
+                    st.info(f"**용도:** {b_type}\n\n**연락처:** {phone} | **만기/보증/월세:** {end_date} / {deposit} / {rent}\n\n**위반여부:** {viol} | **특이사항:** {memo}")
                     
                     if "2020-" in str(reg_date):
                         if st.button("✅ 현 소유주 일치 확인 (갱신)", key=f"upd_2020_own_{idx}"):
@@ -568,15 +548,12 @@ with tabs[1]:
                             if edit_memo and call_date:
                                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                 full_reason = f"[{call_date} 통화] {edit_memo}"
-                                
                                 ws_data.update_cell(row_idx, 26, "비공개")
                                 new_memo = f"{memo}\n👉 변경사항: {full_reason}".strip()
                                 new_row = [city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, new_memo, now_str, user_name, "정상"]
                                 ws_data.append_row(new_row)
-                                
                                 ws_request.append_row([now_str, user_name, addr_str, room_str, full_reason, "자동처리"])
                                 update_token(user_name, 1, f"정보 자동 수정 ({addr_str} {room_str})")
-                                
                                 st.cache_data.clear()
                                 st.success("✅ 데이터가 갱신되고 기존 내역은 비공개로 보존됩니다! (토큰 +1)")
                                 st.rerun()
@@ -596,7 +573,6 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("📝 신규 등록 (완료 시 +3 토큰 / +5점)")
     
-    # 💡 신규 등록용 Cascading 드롭다운
     c_reg1, c_reg2, c_reg3 = st.columns([1, 1, 1])
     
     reg_sido_opts = list(KOREA_REGION_DATA.keys())
@@ -607,45 +583,53 @@ with tabs[2]:
     reg_gu_idx = reg_gu_opts.index("송파구") if "송파구" in reg_gu_opts else 0
     reg_gu = c_reg2.selectbox("시/군/구 (등록)", reg_gu_opts, index=reg_gu_idx)
     
-    # [핵심] 없는 동네 대비용 "직접 입력" 하이브리드 기능 추가!
     reg_dong_opts = KOREA_REGION_DATA[reg_sido][reg_gu] + ["➕직접 입력(신규지역)"]
     reg_dong_idx = reg_dong_opts.index("방이동") if "방이동" in reg_dong_opts else 0
     reg_dong_sel = c_reg3.selectbox("법정동 (등록)", reg_dong_opts, index=reg_dong_idx)
     
-    # 임시 저장소 초기화 방지
+    # 세션 상태 초기화 방어
     if "reg_bunji" not in st.session_state: st.session_state.reg_bunji = ""
     if "reg_sub_dong" not in st.session_state: st.session_state.reg_sub_dong = "0"
-    if "reg_deposit" not in st.session_state: st.session_state.reg_deposit = ""
-    if "reg_rent" not in st.session_state: st.session_state.reg_rent = ""
     if "reg_room" not in st.session_state: st.session_state.reg_room = ""
     if "reg_name" not in st.session_state: st.session_state.reg_name = ""
     if "reg_birth" not in st.session_state: st.session_state.reg_birth = ""
     if "reg_phone" not in st.session_state: st.session_state.reg_phone = ""
+    if "reg_deposit" not in st.session_state: st.session_state.reg_deposit = ""
+    if "reg_rent" not in st.session_state: st.session_state.reg_rent = ""
     if "reg_end_date" not in st.session_state: st.session_state.reg_end_date = ""
+    if "reg_viol" not in st.session_state: st.session_state.reg_viol = "위반 없음"
     if "reg_memo" not in st.session_state: st.session_state.reg_memo = ""
     if "reg_custom_dong" not in st.session_state: st.session_state.reg_custom_dong = ""
 
     with st.form("reg_form", clear_on_submit=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            if reg_dong_sel == "➕직접 입력(신규지역)":
-                st.session_state.reg_custom_dong = st.text_input("법정동 직접 입력 (필수)", value=st.session_state.reg_custom_dong, placeholder="예: 연남동")
-                f_dong = st.session_state.reg_custom_dong
-            else:
-                f_dong = reg_dong_sel
-                
-            st.session_state.reg_bunji = st.text_input("번지 (필수)", value=st.session_state.reg_bunji, placeholder="28-2")
-            st.session_state.reg_sub_dong = st.text_input("번지 뒤 '동' (없으면 0)", value=st.session_state.reg_sub_dong)
-            st.session_state.reg_deposit = st.text_input("보증금 (만원)", value=st.session_state.reg_deposit)
-            st.session_state.reg_rent = st.text_input("월세 (만원)", value=st.session_state.reg_rent)
-        with col2:
-            st.session_state.reg_room = st.text_input("호실 (필수, 숫자만)", value=st.session_state.reg_room, placeholder="101")
-            st.session_state.reg_name = st.text_input("임대인 성함 (필수)", value=st.session_state.reg_name)
-            st.session_state.reg_birth = st.text_input("생년월일 (필수, 숫자만)", value=st.session_state.reg_birth, placeholder="940101")
-            st.session_state.reg_phone = st.text_input("연락처 (필수, 숫자만)", value=st.session_state.reg_phone, placeholder="01012345678")
-            st.session_state.reg_end_date = st.text_input("현 만기일", value=st.session_state.reg_end_date, placeholder="2026-05-30")
-            
-        st.session_state.reg_memo = st.text_area("특이사항", value=st.session_state.reg_memo)
+        if reg_dong_sel == "➕직접 입력(신규지역)":
+            st.session_state.reg_custom_dong = st.text_input("법정동 직접 입력 (필수)", value=st.session_state.reg_custom_dong, placeholder="예: 연남동")
+            f_dong = st.session_state.reg_custom_dong
+        else:
+            f_dong = reg_dong_sel
+
+        # 💡 [핵심] 탭(Tab) 이동 동선 최적화 (가로줄 단위 배치)
+        r1_c1, r1_c2, r1_c3 = st.columns(3)
+        st.session_state.reg_bunji = r1_c1.text_input("번지 (필수)", value=st.session_state.reg_bunji, placeholder="28-2")
+        st.session_state.reg_sub_dong = r1_c2.text_input("번지 뒤 '동' (없으면 0)", value=st.session_state.reg_sub_dong)
+        st.session_state.reg_room = r1_c3.text_input("호실 (필수, 숫자만)", value=st.session_state.reg_room, placeholder="101")
+        
+        r2_c1, r2_c2, r2_c3 = st.columns(3)
+        st.session_state.reg_name = r2_c1.text_input("임대인 성함 (필수)", value=st.session_state.reg_name)
+        st.session_state.reg_birth = r2_c2.text_input("생년월일 (필수, 숫자만)", value=st.session_state.reg_birth, placeholder="940101")
+        st.session_state.reg_phone = r2_c3.text_input("연락처 (필수, 숫자만)", value=st.session_state.reg_phone, placeholder="01012345678")
+        
+        r3_c1, r3_c2, r3_c3 = st.columns(3)
+        st.session_state.reg_deposit = r3_c1.text_input("보증금 (만원)", value=st.session_state.reg_deposit)
+        st.session_state.reg_rent = r3_c2.text_input("월세 (만원)", value=st.session_state.reg_rent)
+        st.session_state.reg_end_date = r3_c3.text_input("만기일 (필수)", value=st.session_state.reg_end_date, placeholder="예: 2026-05-30 (공실/즉시입주시 당일 입력)")
+        
+        r4_c1, r4_c2 = st.columns([1, 2])
+        viol_opts = ["위반 없음", "위반건축물"]
+        viol_idx = viol_opts.index(st.session_state.reg_viol) if st.session_state.reg_viol in viol_opts else 0
+        st.session_state.reg_viol = r4_c1.selectbox("위반건축물 여부", viol_opts, index=viol_idx)
+        st.session_state.reg_memo = r4_c2.text_area("특이사항", value=st.session_state.reg_memo, placeholder="예: 애완가능, 자주식 주차가능, LH대출 가능, 전세권설정가능, 보증금 조절가능 등")
+        
         submit_btn = st.form_submit_button("💾 데이터 등록", type="primary", use_container_width=True)
 
     if submit_btn:
@@ -654,11 +638,14 @@ with tabs[2]:
         f_name = st.session_state.reg_name
         f_birth = st.session_state.reg_birth
         f_phone = st.session_state.reg_phone
+        f_end = st.session_state.reg_end_date
+        f_viol = st.session_state.reg_viol
 
         has_error = False
         
-        if not f_dong or not f_bunji or not f_name or not f_room or not f_birth or not f_phone:
-            st.error("🚨 필수 항목(법정동, 번지, 호실, 성함, 생년월일, 연락처)을 모두 입력해주세요.")
+        # 만기일 누락 방지 로직 추가
+        if not f_dong or not f_bunji or not f_name or not f_room or not f_birth or not f_phone or not f_end:
+            st.error("🚨 필수 항목(법정동, 번지, 호실, 성함, 생년월일, 연락처, 만기일)을 모두 입력해주세요. (공실이나 즉시입주인 경우 오늘 날짜를 입력해 주세요)")
             has_error = True
             
         if f_room and not f_room.isdigit():
@@ -697,20 +684,23 @@ with tabs[2]:
                 st.error(f"❌ 이미 등록된 매물입니다! (정보 변경 시 검색 후 [🛠️ 수정요청] 요망)")
             else:
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                # 💡 위반건축물 드롭다운 값을 15번째 열(인덱스 14)에 정확하게 반영
                 new_row = [
                     reg_sido, reg_gu, f_dong, bon, bu, 
                     "", "", d_dong, r_ho, f_name, f_birth, format_phone(f_phone), 
-                    "미분류", "", "정상", "", "", "", 
+                    "미분류", "", f_viol, "", "", "", 
                     st.session_state.reg_deposit, st.session_state.reg_rent, "", 
-                    st.session_state.reg_end_date, st.session_state.reg_memo, now, user_name, "정상"
+                    f_end, st.session_state.reg_memo, now, user_name, "정상"
                 ]
                 ws_data.append_row(new_row)
                 
                 update_token(user_name, 3, f"신규 등록 ({dup_addr} {dup_room})")
                 
+                # 등록 성공 후 입력칸 깔끔하게 초기화
                 for key in ["reg_bunji", "reg_room", "reg_name", "reg_birth", "reg_phone", "reg_deposit", "reg_rent", "reg_end_date", "reg_memo", "reg_custom_dong"]:
                     st.session_state[key] = ""
                 st.session_state.reg_sub_dong = "0"
+                st.session_state.reg_viol = "위반 없음"
                 
                 st.cache_data.clear() 
                 st.success("✅ 신규 매물 등록 완료! 토큰 +3개 / 기여도 +5점 자동 지급!")

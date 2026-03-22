@@ -538,13 +538,22 @@ with tabs[3]:
         addr_clean = f"{dong}{bon}" + (f"-{bu}" if bu and bu != "0" else "")
         addr_clean = addr_clean.replace(" ", "")
         
-        # 오늘 이미 업데이트된 매물 제외
+        # 1. 오늘 이미 업데이트된 매물 제외
         if today_shift in str(r[23]): continue 
         
-        # 타겟 주소에 포함되는지 확인
+        # 2. 연락처가 없는 매물은 애초에 할당에서 제외 (해결!)
+        if "연락처 없음" in str(r[11]) or not str(r[11]).strip(): continue
+        
+        # 3. 다른 직원의 전담 관리 매물은 할당에서 제외 (해결!)
+        full_addr_for_mgr = f"{r[0]} {r[1]} {r[2]} {r[3]}" + (f"-{r[4]}" if r[4] and str(r[4]) != "0" else "")
+        if str(r[5]): full_addr_for_mgr += f" {r[5]}"
+        mgr_name = next((m for b, m in MANAGER_BUILDINGS.items() if f" {b} " in f" {full_addr_for_mgr} "), None)
+        if mgr_name and mgr_name != user_name and user_email != ADMIN_EMAIL: continue
+
+        # 4. 타겟 주소가 '정확히' 일치하는지 확인 (in 을 == 로 변경하여 50과 50-3 겹침 해결!)
         is_target = False
         for ta in target_addresses:
-            if ta in addr_clean:
+            if ta == addr_clean: 
                 is_target = True
                 break
                 
@@ -740,7 +749,7 @@ if user_email == ADMIN_EMAIL:
             
             is_target = False
             for ta in [a.strip().replace(" ", "") for a in new_target.split(",") if a.strip()]:
-                if ta in addr_clean:
+                if ta == addr_clean:  # <--- 여기를 in 에서 == 로 변경
                     is_target = True
                     break
             

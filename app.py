@@ -588,6 +588,11 @@ with tabs[3]:
             
             c_pass, c_space = st.columns([1, 4])
             if c_pass.button("⏭️ 부재중/패스 (토큰+0)", key=f"pass_{row_idx}"):
+                # 💡 [추가된 핵심 로직] 부재중 처리 시, 시트의 최근 연락일을 '지금'으로 덮어씌워서 오늘 명단에서 즉시 제외시킴
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                ws_data.update_cell(row_idx, 24, now_str) # 24열(등록일시) 업데이트
+                ws_data.update_cell(row_idx, 25, user_name) # 25열(등록자) 업데이트
+                
                 if user_email != ADMIN_EMAIL:
                     ws_staff.update_cell(staff_row_index, 8, quota_done + 1)
                 st.cache_data.clear()

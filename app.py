@@ -32,6 +32,53 @@ st.markdown("""
 
 ADMIN_EMAIL = "dldmdcks94@gmail.com"
 
+# --- 💡 [신규 탑재] 대한민국 표준 행정구역 DB (연쇄 반응용) ---
+KOREA_REGION_DATA = {
+    "서울특별시": {
+        "강남구": ["개포동", "논현동", "대치동", "도곡동", "삼성동", "세곡동", "수서동", "신사동", "압구정동", "역삼동", "율현동", "일원동", "자곡동", "청담동"],
+        "강동구": ["강일동", "고덕동", "길동", "둔촌동", "명일동", "상일동", "성내동", "암사동", "천호동"],
+        "강북구": ["미아동", "번동", "수유동", "우이동"],
+        "강서구": ["가양동", "개화동", "공항동", "과해동", "내발산동", "등촌동", "마곡동", "방화동", "염창동", "오곡동", "오쇠동", "외발산동", "화곡동"],
+        "관악구": ["남현동", "봉천동", "신림동"],
+        "광진구": ["광장동", "구의동", "군자동", "능동", "자양동", "중곡동", "화양동"],
+        "구로구": ["가리봉동", "개봉동", "고척동", "구로동", "궁동", "수궁동", "신도림동", "오류동", "온수동", "천왕동", "항동"],
+        "금천구": ["가산동", "독산동", "시흥동"],
+        "노원구": ["공릉동", "상계동", "월계동", "중계동", "하계동"],
+        "도봉구": ["도봉동", "방학동", "쌍문동", "창동"],
+        "동대문구": ["답십리동", "신설동", "용두동", "이문동", "장안동", "전농동", "제기동", "청량리동", "회기동", "휘경동"],
+        "동작구": ["노량진동", "대방동", "동작동", "본동", "사당동", "상도동", "신대방동", "흑석동"],
+        "마포구": ["공덕동", "구수동", "노고산동", "당인동", "대흥동", "도화동", "동교동", "마포동", "망원동", "상수동", "상암동", "서교동", "성산동", "신공덕동", "신수동", "신정동", "아현동", "연남동", "염리동", "용강동", "중동", "창전동", "토정동", "하중동", "합정동"],
+        "서대문구": ["남가좌동", "냉천동", "대신동", "대현동", "미근동", "봉원동", "북가좌동", "북아현동", "신촌동", "연희동", "영천동", "옥천동", "창천동", "천연동", "충정로2가", "충정로3가", "합동", "현저동", "홍은동", "홍제동"],
+        "서초구": ["내곡동", "반포동", "방배동", "서초동", "신원동", "양재동", "염곡동", "우면동", "원지동", "잠원동"],
+        "성동구": ["금호동1가", "금호동2가", "금호동3가", "금호동4가", "도선동", "마장동", "사근동", "상왕십리동", "성수1가1동", "성수1가2동", "성수2가1동", "성수2가3동", "송정동", "옥수동", "용답동", "응봉동", "하왕십리동", "행당동"],
+        "성북구": ["길음동", "돈암동", "동선동", "동소문동", "보문동", "삼선동", "상월곡동", "석관동", "성북동", "안암동", "장위동", "정릉동", "종암동", "하월곡동"],
+        "송파구": ["가락동", "거여동", "마천동", "문정동", "방이동", "삼전동", "석촌동", "송파동", "신천동", "오금동", "잠실동", "장지동", "풍납동"],
+        "양천구": ["목동", "신월동", "신정동"],
+        "영등포구": ["당산동", "대림동", "도림동", "문래동", "신길동", "양평동", "여의도동", "영등포동"],
+        "용산구": ["갈월동", "남영동", "도원동", "동빙고동", "동자동", "문배동", "보광동", "산천동", "서계동", "서빙고동", "신계동", "신창동", "용문동", "용산동", "원효로", "이촌동", "이태원동", "주성동", "청암동", "청파동", "한강로", "한남동", "효창동", "후암동"],
+        "은평구": ["갈현동", "구산동", "녹번동", "대조동", "불광동", "수색동", "신사동", "역촌동", "응암동", "증산동", "진관동"],
+        "종로구": ["가회동", "견지동", "경운동", "공평동", "관수동", "관철동", "관훈동", "교남동", "교북동", "구기동", "궁정동", "권농동", "낙원동", "내수동", "내자동", "누상동", "누하동", "당주동", "도렴동", "돈의동", "동숭동", "명륜1가", "명륜2가", "명륜3가", "명륜4가", "묘동", "무악동", "봉익동", "부암동", "사직동", "삼청동", "서린동", "세종로", "소격동", "송월동", "송현동", "수송동", "숭인동", "신교동", "신문로1가", "신문로2가", "신영동", "안국동", "연건동", "연지동", "예지동", "옥인동", "와룡동", "운니동", "원남동", "원서동", "이화동", "익선동", "인사동", "인의동", "장사동", "재동", "적선동", "종로1가", "종로2가", "종로3가", "종로4가", "종로5가", "종로6가", "중학동", "창성동", "창신동", "청운동", "청진동", "체부동", "충신동", "통의동", "통인동", "팔판동", "평동", "평창동", "필운동", "행촌동", "혜화동", "홍파동", "화동", "효자동", "효제동", "훈정동"],
+        "중구": ["광희동", "남대문로", "남산동", "남창동", "남학동", "다동", "만리동", "명동", "무교동", "무학동", "묵정동", "방산동", "봉래동", "북창동", "산림동", "삼각동", "서소문동", "소공동", "수표동", "수하동", "순화동", "신당동", "쌍림동", "예관동", "예장동", "오장동", "을지로", "의주로", "인현동", "입정동", "장교동", "장충동", "저동", "정동", "주교동", "주자동", "중림동", "초동", "충무로", "충정로1가", "태평로", "필동", "황학동", "회현동", "흥인동"],
+        "중랑구": ["망우동", "면목동", "묵동", "상봉동", "신내동", "중화동"]
+    },
+    "경기도": {"수원시": [], "성남시": [], "고양시": [], "용인시": [], "부천시": [], "안산시": [], "안양시": [], "남양주시": [], "화성시": [], "평택시": [], "의정부시": [], "시흥시": [], "파주시": [], "광명시": [], "김포시": [], "군포시": [], "광주시": [], "이천시": [], "양주시": [], "오산시": [], "구리시": [], "안성시": [], "포천시": [], "의왕시": [], "하남시": [], "여주시": [], "양평군": [], "동두천시": [], "과천시": [], "가평군": [], "연천군": []},
+    "인천광역시": {"계양구": [], "미추홀구": [], "남동구": [], "동구": [], "부평구": [], "서구": [], "연수구": [], "중구": [], "강화군": [], "옹진군": []},
+    "부산광역시": {"강서구": [], "금정구": [], "기장군": [], "남구": [], "동구": [], "동래구": [], "부산진구": [], "북구": [], "사상구": [], "사하구": [], "서구": [], "수영구": [], "연제구": [], "영도구": [], "중구": []},
+    "대구광역시": {"남구": [], "달서구": [], "달성군": [], "동구": [], "북구": [], "서구": [], "수성구": [], "중구": [], "군위군": []},
+    "광주광역시": {"광산구": [], "남구": [], "동구": [], "북구": [], "서구": []},
+    "대전광역시": {"대덕구": [], "동구": [], "서구": [], "유성구": [], "중구": []},
+    "울산광역시": {"남구": [], "동구": [], "북구": [], "중구": [], "울주군": []},
+    "세종특별자치시": {"세종시": []},
+    "강원특별자치도": {"춘천시": [], "원주시": [], "강릉시": [], "동해시": [], "태백시": [], "속초시": [], "삼척시": [], "홍천군": [], "횡성군": [], "영월군": [], "평창군": [], "정선군": [], "철원군": [], "화천군": [], "양구군": [], "인제군": [], "고성군": [], "양양군": []},
+    "충청북도": {"청주시": [], "충주시": [], "제천시": [], "보은군": [], "옥천군": [], "영동군": [], "증평군": [], "진천군": [], "괴산군": [], "음성군": [], "단양군": []},
+    "충청남도": {"천안시": [], "공주시": [], "보령시": [], "아산시": [], "서산시": [], "논산시": [], "계룡시": [], "당진시": [], "금산군": [], "부여군": [], "서천군": [], "청양군": [], "홍성군": [], "예산군": [], "태안군": []},
+    "전북특별자치도": {"전주시": [], "군산시": [], "익산시": [], "정읍시": [], "남원시": [], "김제시": [], "완주군": [], "진안군": [], "무주군": [], "장수군": [], "임실군": [], "순창군": [], "고창군": [], "부안군": []},
+    "전라남도": {"목포시": [], "여수시": [], "순천시": [], "나주시": [], "광양시": [], "담양군": [], "곡성군": [], "구례군": [], "고흥군": [], "보성군": [], "화순군": [], "장흥군": [], "강진군": [], "해남군": [], "영암군": [], "무안군": [], "함평군": [], "영광군": [], "장성군": [], "완도군": [], "진도군": [], "신안군": []},
+    "경상북도": {"포항시": [], "경주시": [], "김천시": [], "안동시": [], "구미시": [], "영주시": [], "영천시": [], "상주시": [], "문경시": [], "경산시": [], "의성군": [], "청송군": [], "영양군": [], "영덕군": [], "청도군": [], "고령군": [], "성주군": [], "칠곡군": [], "예천군": [], "봉화군": [], "울진군": [], "울릉군": []},
+    "경상남도": {"창원시": [], "진주시": [], "통영시": [], "사천시": [], "김해시": [], "밀양시": [], "거제시": [], "양산시": [], "의령군": [], "함안군": [], "창녕군": [], "고성군": [], "남해군": [], "하동군": [], "산청군": [], "함양군": [], "거창군": [], "합천군": []},
+    "제주특별자치도": {"제주시": [], "서귀포시": []}
+}
+
 # 2. 로그인 및 DB 연결 설정
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
@@ -276,28 +323,31 @@ tabs_list = ["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"
 if user_email == ADMIN_EMAIL: tabs_list.append("👑 관리자 전용")
 tabs = st.tabs(tabs_list)
 
-# 💡 DB에서 유일한 주소 목록 추출 (알파벳 정렬)
-unique_sido = ["전체"] + sorted(list(set([str(r[0]).strip() for r in all_records if str(r[0]).strip()])))
-unique_sigungu = ["전체"] + sorted(list(set([str(r[1]).strip() for r in all_records if str(r[1]).strip()])))
-unique_dong = ["전체"] + sorted(list(set([str(r[2]).strip() for r in all_records if str(r[2]).strip()])))
-
-# 엘루이 맞춤형 기본값 세팅
-default_sido = unique_sido.index("서울특별시") if "서울특별시" in unique_sido else 0
-default_sigungu = unique_sigungu.index("송파구") if "송파구" in unique_sigungu else 0
-default_dong = unique_dong.index("방이동") if "방이동" in unique_dong else 0
 
 # --- [탭 1] 주소 검색 ---
 with tabs[0]:
+    # 💡 Cascading(연쇄) 드롭다운을 위해 form 바깥으로 배치하여 즉각 반응하도록 설정
+    c_search1, c_search2, c_search3 = st.columns([1, 1, 1])
+    
+    # 1. 시/도 선택
+    sido_opts = ["전체"] + list(KOREA_REGION_DATA.keys())
+    sido_idx = sido_opts.index("서울특별시") if "서울특별시" in sido_opts else 0
+    sel_sido = c_search1.selectbox("시/도", sido_opts, index=sido_idx)
+    
+    # 2. 시/군/구 선택 (선택된 시/도에 종속)
+    gu_opts = ["전체"] + list(KOREA_REGION_DATA[sel_sido].keys()) if sel_sido != "전체" else ["전체"]
+    gu_idx = gu_opts.index("송파구") if "송파구" in gu_opts else 0
+    sel_sigungu = c_search2.selectbox("시/군/구", gu_opts, index=gu_idx)
+    
+    # 3. 법정동 선택 (선택된 시/군/구에 종속)
+    dong_opts = ["전체"] + KOREA_REGION_DATA[sel_sido][sel_sigungu] if sel_sigungu != "전체" and sel_sido != "전체" else ["전체"]
+    dong_idx = dong_opts.index("방이동") if "방이동" in dong_opts else 0
+    sel_dong = c_search3.selectbox("법정동", dong_opts, index=dong_idx)
+    
     with st.form("search_addr_form"):
-        # 💡 대표님이 원하신 5분할 스마트 필터 UI
-        c1, c2, c3, c4, c5 = st.columns([1.2, 1.2, 1.2, 1.5, 1.5])
-        
-        sel_sido = c1.selectbox("시/도", unique_sido, index=default_sido)
-        sel_sigungu = c2.selectbox("시/군/구", unique_sigungu, index=default_sigungu)
-        sel_dong = c3.selectbox("법정동", unique_dong, index=default_dong)
-        
-        b_search = c4.text_input("번지 / 건물명", placeholder="28-2 또는 엘퍼스트")
-        r_search = c5.text_input("호실", placeholder="101")
+        c_search4, c_search5 = st.columns([2, 1])
+        b_search = c_search4.text_input("번지 / 건물명", placeholder="28-2 또는 엘퍼스트")
+        r_search = c_search5.text_input("호실", placeholder="101")
         
         submitted = st.form_submit_button("🔍 주소 검색", type="primary", use_container_width=True)
         
@@ -308,12 +358,12 @@ with tabs[0]:
             r_sigungu = str(r[1]).strip()
             r_dong = str(r[2]).strip()
             
-            # 드롭다운 필터 조건 매칭
+            # 드롭다운 필터 완벽 검증
             match_sido = (sel_sido == "전체" or sel_sido == r_sido)
             match_sigungu = (sel_sigungu == "전체" or sel_sigungu == r_sigungu)
             match_dong = (sel_dong == "전체" or sel_dong == r_dong)
             
-            # 텍스트 입력 조건 매칭
+            # 텍스트 입력 검증
             b_target = (f"{r[3]}-{r[4]}" if str(r[4]) != "0" else str(r[3])) + str(r[6]).replace(" ","")
             match_b = (b_search.replace(" ","") in b_target.replace(" ","")) if b_search else True
             
@@ -546,42 +596,59 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("📝 신규 등록 (완료 시 +3 토큰 / +5점)")
     
-    if "reg_city" not in st.session_state: st.session_state.reg_city = "서울특별시"
-    if "reg_dong" not in st.session_state: st.session_state.reg_dong = ""
+    # 💡 신규 등록용 Cascading 드롭다운
+    c_reg1, c_reg2, c_reg3 = st.columns([1, 1, 1])
+    
+    reg_sido_opts = list(KOREA_REGION_DATA.keys())
+    reg_sido_idx = reg_sido_opts.index("서울특별시") if "서울특별시" in reg_sido_opts else 0
+    reg_sido = c_reg1.selectbox("시/도 (등록)", reg_sido_opts, index=reg_sido_idx)
+    
+    reg_gu_opts = list(KOREA_REGION_DATA[reg_sido].keys())
+    reg_gu_idx = reg_gu_opts.index("송파구") if "송파구" in reg_gu_opts else 0
+    reg_gu = c_reg2.selectbox("시/군/구 (등록)", reg_gu_opts, index=reg_gu_idx)
+    
+    # [핵심] 없는 동네 대비용 "직접 입력" 하이브리드 기능 추가!
+    reg_dong_opts = KOREA_REGION_DATA[reg_sido][reg_gu] + ["➕직접 입력(신규지역)"]
+    reg_dong_idx = reg_dong_opts.index("방이동") if "방이동" in reg_dong_opts else 0
+    reg_dong_sel = c_reg3.selectbox("법정동 (등록)", reg_dong_opts, index=reg_dong_idx)
+    
+    # 임시 저장소 초기화 방지
     if "reg_bunji" not in st.session_state: st.session_state.reg_bunji = ""
     if "reg_sub_dong" not in st.session_state: st.session_state.reg_sub_dong = "0"
     if "reg_deposit" not in st.session_state: st.session_state.reg_deposit = ""
     if "reg_rent" not in st.session_state: st.session_state.reg_rent = ""
-    if "reg_gu" not in st.session_state: st.session_state.reg_gu = "송파구"
     if "reg_room" not in st.session_state: st.session_state.reg_room = ""
     if "reg_name" not in st.session_state: st.session_state.reg_name = ""
     if "reg_birth" not in st.session_state: st.session_state.reg_birth = ""
     if "reg_phone" not in st.session_state: st.session_state.reg_phone = ""
     if "reg_end_date" not in st.session_state: st.session_state.reg_end_date = ""
     if "reg_memo" not in st.session_state: st.session_state.reg_memo = ""
+    if "reg_custom_dong" not in st.session_state: st.session_state.reg_custom_dong = ""
 
     with st.form("reg_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.reg_city = st.text_input("시/도", st.session_state.reg_city)
-            st.session_state.reg_dong = st.text_input("읍/면/동 (필수)", value=st.session_state.reg_dong, placeholder="방이동")
+            if reg_dong_sel == "➕직접 입력(신규지역)":
+                st.session_state.reg_custom_dong = st.text_input("법정동 직접 입력 (필수)", value=st.session_state.reg_custom_dong, placeholder="예: 연남동")
+                f_dong = st.session_state.reg_custom_dong
+            else:
+                f_dong = reg_dong_sel
+                
             st.session_state.reg_bunji = st.text_input("번지 (필수)", value=st.session_state.reg_bunji, placeholder="28-2")
             st.session_state.reg_sub_dong = st.text_input("번지 뒤 '동' (없으면 0)", value=st.session_state.reg_sub_dong)
             st.session_state.reg_deposit = st.text_input("보증금 (만원)", value=st.session_state.reg_deposit)
             st.session_state.reg_rent = st.text_input("월세 (만원)", value=st.session_state.reg_rent)
         with col2:
-            st.session_state.reg_gu = st.text_input("구/군", st.session_state.reg_gu)
             st.session_state.reg_room = st.text_input("호실 (필수, 숫자만)", value=st.session_state.reg_room, placeholder="101")
             st.session_state.reg_name = st.text_input("임대인 성함 (필수)", value=st.session_state.reg_name)
             st.session_state.reg_birth = st.text_input("생년월일 (필수, 숫자만)", value=st.session_state.reg_birth, placeholder="940101")
             st.session_state.reg_phone = st.text_input("연락처 (필수, 숫자만)", value=st.session_state.reg_phone, placeholder="01012345678")
             st.session_state.reg_end_date = st.text_input("현 만기일", value=st.session_state.reg_end_date, placeholder="2026-05-30")
+            
         st.session_state.reg_memo = st.text_area("특이사항", value=st.session_state.reg_memo)
-        
         submit_btn = st.form_submit_button("💾 데이터 등록", type="primary", use_container_width=True)
 
     if submit_btn:
-        f_dong = st.session_state.reg_dong
         f_bunji = st.session_state.reg_bunji
         f_room = st.session_state.reg_room
         f_name = st.session_state.reg_name
@@ -591,7 +658,7 @@ with tabs[2]:
         has_error = False
         
         if not f_dong or not f_bunji or not f_name or not f_room or not f_birth or not f_phone:
-            st.error("🚨 필수 항목(읍/면/동, 번지, 호실, 성함, 생년월일, 연락처)을 모두 입력해주세요.")
+            st.error("🚨 필수 항목(법정동, 번지, 호실, 성함, 생년월일, 연락처)을 모두 입력해주세요.")
             has_error = True
             
         if f_room and not f_room.isdigit():
@@ -615,7 +682,7 @@ with tabs[2]:
             d_dong = "동없음" if st.session_state.reg_sub_dong == "0" else (f"{st.session_state.reg_sub_dong}동" if not st.session_state.reg_sub_dong.endswith("동") else st.session_state.reg_sub_dong)
             r_ho = f"{f_room}호" if not f_room.endswith("호") else f_room
             
-            dup_addr = f"{st.session_state.reg_city} {st.session_state.reg_gu} {f_dong} {bon}" + (f"-{bu}" if bu != "0" else "")
+            dup_addr = f"{reg_sido} {reg_gu} {f_dong} {bon}" + (f"-{bu}" if bu != "0" else "")
             dup_room = f"{d_dong} {r_ho}" if d_dong != "동없음" else r_ho
             
             duplicate = []
@@ -631,7 +698,7 @@ with tabs[2]:
             else:
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 new_row = [
-                    st.session_state.reg_city, st.session_state.reg_gu, f_dong, bon, bu, 
+                    reg_sido, reg_gu, f_dong, bon, bu, 
                     "", "", d_dong, r_ho, f_name, f_birth, format_phone(f_phone), 
                     "미분류", "", "정상", "", "", "", 
                     st.session_state.reg_deposit, st.session_state.reg_rent, "", 
@@ -641,7 +708,7 @@ with tabs[2]:
                 
                 update_token(user_name, 3, f"신규 등록 ({dup_addr} {dup_room})")
                 
-                for key in ["reg_dong", "reg_bunji", "reg_room", "reg_name", "reg_birth", "reg_phone", "reg_deposit", "reg_rent", "reg_end_date", "reg_memo"]:
+                for key in ["reg_bunji", "reg_room", "reg_name", "reg_birth", "reg_phone", "reg_deposit", "reg_rent", "reg_end_date", "reg_memo", "reg_custom_dong"]:
                     st.session_state[key] = ""
                 st.session_state.reg_sub_dong = "0"
                 

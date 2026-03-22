@@ -80,7 +80,6 @@ if not st.session_state.connected:
 @st.cache_resource
 def get_ss():
     creds = Credentials.from_authorized_user_info(token_dict)
-    # 대표님이 알려주신 새로운 시트의 gid를 정확히 타겟팅합니다.
     ss = gspread.authorize(creds).open_by_key('121-C5OIQpOnTtDbgSLgiq_Qdf5WoHhhIpNkRCWy5hKA')
     return ss
 
@@ -156,7 +155,7 @@ def extract_tags(memo):
 
 # 자동 토큰 지급 헬퍼 함수
 def update_token(target_name, amount, reason):
-    if target_name == "이응찬 대표": return # 대표님은 토큰 무한
+    if target_name == "이응찬 대표": return
     target_idx = None
     for i, r in enumerate(staff_records):
         if r['이름'] == target_name:
@@ -195,58 +194,47 @@ now_date = datetime.now()
 this_month_str = now_date.strftime("%Y-%m")
 
 for r in all_records_raw:
-    # 새로운 양식: 등록일시=23, 등록자=24
     reg = str(r[23]) if len(r) > 23 else ""
     registrar = str(r[24]) if len(r) > 24 else ""
     if registrar == user_name and this_month_str in reg and "2020-" not in reg:
-        my_month_score += 5 # 신규 등록 5점
+        my_month_score += 5
 
 for r in req_all_values[1:]:
     req_date = str(r[0])
     req_user = str(r[1])
     req_stat = str(r[5])
     if req_user == user_name and this_month_str in req_date:
-        my_month_score += 3 # 제보 3점
-        if req_stat in ["처리완료", "자동처리"]: my_month_score += 1 # 갱신(승인/자동처리) 시 추가 1점
+        my_month_score += 3
+        if req_stat in ["처리완료", "자동처리"]: my_month_score += 1
 
 for i, r in enumerate(all_records_raw):
     row_idx = i + 2 
-    # 새로운 양식: 상태=25
     status = r[25].strip() if len(r) > 25 else "정상"
     
     if user_email != ADMIN_EMAIL and status in ["비공개", "삭제", "잘못됨"]:
         continue
         
-    # 새로운 26개 열 구조에 맞게 빈칸 채우기
     r_padded = (r + [""]*26)[:26]
     if not r_padded[25]: r_padded[25] = "정상"
-    r_padded.append(row_idx) # row_idx는 26번째(마지막)
+    r_padded.append(row_idx)
     
-    # 중복방지 키 (법정동, 본번, 부번, 동, 호실, 이름, 생년월일)
     key = (str(r_padded[2]).replace(" ",""), str(r_padded[3]), str(r_padded[4]), str(r_padded[7]), str(r_padded[8]), str(r_padded[9]), str(r_padded[10]))
     temp_dict[key] = r_padded 
 
 all_records = list(temp_dict.values())
 all_records.reverse()
 
-# --- 사이드바 (가이드라인 줄바꿈 및 폰트 개선) ---
+# --- 사이드바 ---
 st.sidebar.markdown(f"### 👤 {user_name}")
-
-# 내 토큰 표시
 st.sidebar.markdown(f"**보유 토큰:** `{user_tokens} 개`")
-# CSS로 줄바꿈 및 글자 크기, 마진 조절
 st.sidebar.markdown("""
 <div style='font-size: 13px; color: #4a4a4a; margin-top: -5px;'>
     👉 신규 매물 등록 <b>+3</b><br>
     👉 오류 제보 승인 <b>+1</b>
 </div>
 """, unsafe_allow_html=True)
-
-st.sidebar.write("") # 여백
-
-# 내 기여도 표시
+st.sidebar.write("")
 st.sidebar.markdown(f"**이번 달 기여도:** `{my_month_score} 점`")
-# CSS로 줄바꿈 및 글자 크기 조절
 st.sidebar.markdown("""
 <div style='font-size: 13px; color: #4a4a4a; margin-top: -5px;'>
     🏆 신규등록 <b>5점</b><br>
@@ -288,38 +276,62 @@ tabs_list = ["🔍 주소 검색", "👤 소유주 검색", "📝 신규 등록"
 if user_email == ADMIN_EMAIL: tabs_list.append("👑 관리자 전용")
 tabs = st.tabs(tabs_list)
 
+# 💡 DB에서 유일한 주소 목록 추출 (알파벳 정렬)
+unique_sido = ["전체"] + sorted(list(set([str(r[0]).strip() for r in all_records if str(r[0]).strip()])))
+unique_sigungu = ["전체"] + sorted(list(set([str(r[1]).strip() for r in all_records if str(r[1]).strip()])))
+unique_dong = ["전체"] + sorted(list(set([str(r[2]).strip() for r in all_records if str(r[2]).strip()])))
+
+# 엘루이 맞춤형 기본값 세팅
+default_sido = unique_sido.index("서울특별시") if "서울특별시" in unique_sido else 0
+default_sigungu = unique_sigungu.index("송파구") if "송파구" in unique_sigungu else 0
+default_dong = unique_dong.index("방이동") if "방이동" in unique_dong else 0
+
 # --- [탭 1] 주소 검색 ---
 with tabs[0]:
     with st.form("search_addr_form"):
-        c1, c2, c3 = st.columns([2, 2, 1])
-        d = c1.text_input("동/건물명", key="t1_dong", placeholder="방이동")
-        b = c2.text_input("번지", key="t1_bunji", placeholder="28-2")
-        r_search = c3.text_input("호실", key="t1_room", placeholder="101")
+        # 💡 대표님이 원하신 5분할 스마트 필터 UI
+        c1, c2, c3, c4, c5 = st.columns([1.2, 1.2, 1.2, 1.5, 1.5])
         
-        submitted = st.form_submit_button("주소 검색", type="primary", use_container_width=True)
+        sel_sido = c1.selectbox("시/도", unique_sido, index=default_sido)
+        sel_sigungu = c2.selectbox("시/군/구", unique_sigungu, index=default_sigungu)
+        sel_dong = c3.selectbox("법정동", unique_dong, index=default_dong)
+        
+        b_search = c4.text_input("번지 / 건물명", placeholder="28-2 또는 엘퍼스트")
+        r_search = c5.text_input("호실", placeholder="101")
+        
+        submitted = st.form_submit_button("🔍 주소 검색", type="primary", use_container_width=True)
         
     if submitted:
         res = []
         for r in all_records:
-            # 검색을 위한 대상 문자열 조합 (법정동+건물명, 번지-부번, 동+호실)
-            d_target = str(r[2]).replace(" ","") + str(r[6]).replace(" ","") 
-            b_target = f"{r[3]}-{r[4]}" if str(r[4]) != "0" else str(r[3])
-            room_target = str(r[7]).replace(" ","") + str(r[8]).replace(" ","")
+            r_sido = str(r[0]).strip()
+            r_sigungu = str(r[1]).strip()
+            r_dong = str(r[2]).strip()
             
-            if (d.replace(" ","") in d_target) and (b.replace(" ","") in b_target) and (r_search.replace(" ","") in room_target):
+            # 드롭다운 필터 조건 매칭
+            match_sido = (sel_sido == "전체" or sel_sido == r_sido)
+            match_sigungu = (sel_sigungu == "전체" or sel_sigungu == r_sigungu)
+            match_dong = (sel_dong == "전체" or sel_dong == r_dong)
+            
+            # 텍스트 입력 조건 매칭
+            b_target = (f"{r[3]}-{r[4]}" if str(r[4]) != "0" else str(r[3])) + str(r[6]).replace(" ","")
+            match_b = (b_search.replace(" ","") in b_target.replace(" ","")) if b_search else True
+            
+            room_target = str(r[7]).replace(" ","") + str(r[8]).replace(" ","")
+            match_r = (r_search.replace(" ","") in room_target.replace(" ","")) if r_search else True
+            
+            if match_sido and match_sigungu and match_dong and match_b and match_r:
                 res.append(r)
                 
-        res.sort(key=lambda x: extract_room_number(x[8])) # 호실 기준으로 정렬
+        res.sort(key=lambda x: extract_room_number(x[8]))
         st.session_state.addr_search_res = res
     
     if st.session_state.addr_search_res is not None:
         st.caption(f"검색 결과: {len(st.session_state.addr_search_res)}건")
         
         for idx, row in enumerate(st.session_state.addr_search_res):
-            # 26열 데이터 완벽 해체
             city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, reg_date, registrar, status, row_idx = row
             
-            # 주소 합치기 (화면 표시 및 제보 확인용)
             addr_str = f"{city} {gu} {dong} {bon}" + (f"-{bu}" if bu and bu != "0" else "")
             if bldg: addr_str += f" {bldg}"
             room_str = f"{d_dong} {room}" if d_dong and d_dong != "동없음" else f"{room}"
@@ -363,7 +375,6 @@ with tabs[0]:
                         if st.form_submit_button("🏆 제보하고 자동 반영 (토큰+1)"):
                             if new_phone:
                                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                                # 26번 칸이 상태
                                 ws_data.update_cell(row_idx, 26, "비공개")
                                 new_row = [city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, format_phone(new_phone), b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, now_str, user_name, "정상"]
                                 ws_data.append_row(new_row)
@@ -382,7 +393,6 @@ with tabs[0]:
                     
                     if "2020-" in str(reg_date):
                         if st.button("✅ 현 소유주 일치 확인 (최신 DB로 갱신)", key=f"upd_2020_{idx}"):
-                            # 24: 등록일시, 25: 등록자
                             ws_data.update_cell(row_idx, 24, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                             ws_data.update_cell(row_idx, 25, user_name)
                             ws_history.append_row([datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_name, 0, user_tokens, "과거 DB 갱신"])
@@ -431,9 +441,8 @@ with tabs[1]:
         submitted_own = st.form_submit_button("소유주 검색", type="primary", use_container_width=True)
         
     if submitted_own:
-        # 9: 이름, 10: 생년월일
         res = [r for r in all_records if (sn in str(r[9])) and (not sb or sb == str(r[10]))]
-        res.sort(key=lambda x: extract_room_number(x[8])) # 8: 호실
+        res.sort(key=lambda x: extract_room_number(x[8])) 
         st.session_state.owner_search_res = res
         
     if st.session_state.owner_search_res is not None:
@@ -598,17 +607,14 @@ with tabs[2]:
             has_error = True
 
         if not has_error:
-            # 본번/부번 쪼개기
             if "-" in f_bunji:
                 bon, bu = f_bunji.split("-", 1)
             else:
                 bon, bu = f_bunji, "0"
             
-            # 동/호수 세팅
             d_dong = "동없음" if st.session_state.reg_sub_dong == "0" else (f"{st.session_state.reg_sub_dong}동" if not st.session_state.reg_sub_dong.endswith("동") else st.session_state.reg_sub_dong)
             r_ho = f"{f_room}호" if not f_room.endswith("호") else f_room
             
-            # 중복 체크용
             dup_addr = f"{st.session_state.reg_city} {st.session_state.reg_gu} {f_dong} {bon}" + (f"-{bu}" if bu != "0" else "")
             dup_room = f"{d_dong} {r_ho}" if d_dong != "동없음" else r_ho
             
@@ -624,7 +630,6 @@ with tabs[2]:
                 st.error(f"❌ 이미 등록된 매물입니다! (정보 변경 시 검색 후 [🛠️ 수정요청] 요망)")
             else:
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                # 26개 열 구조
                 new_row = [
                     st.session_state.reg_city, st.session_state.reg_gu, f_dong, bon, bu, 
                     "", "", d_dong, r_ho, f_name, f_birth, format_phone(f_phone), 
@@ -724,9 +729,7 @@ if user_email == ADMIN_EMAIL:
                     
                     if cA.button("✅ 수정 완료 (토큰+1 지급)", key=f"ok_{row_idx}"):
                         ws_request.update_cell(row_idx, 6, "처리완료")
-                        # 매물 찾아 갱신
                         for m_idx, m_row in enumerate(all_records_raw):
-                            # 기존 구조의 주소 조합 재구성 비교
                             m_addr = f"{m_row[0]} {m_row[1]} {m_row[2]} {m_row[3]}" + (f"-{m_row[4]}" if m_row[4] and m_row[4] != "0" else "")
                             if m_row[5]: m_addr += f" {m_row[5]}"
                             m_room = f"{m_row[7]} {m_row[8]}" if m_row[7] and m_row[7] != "동없음" else m_row[8]

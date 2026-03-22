@@ -9,7 +9,7 @@ import re
 import pandas as pd
 
 # --- 💡 1. UI 다이어트 & 설정 ---
-st.set_page_config(page_title="엘루이 매물관리 어시스턴트", page_icon="🏠", layout="wide")
+st.set_page_config(page_title="엘루이 업무포털", page_icon="🏢", layout="wide")
 st.markdown("""
     <style>
         html, body, [class*="css"]  { font-size: 14px !important; }
@@ -173,7 +173,6 @@ if user_email == ADMIN_EMAIL:
     is_locked = False
     has_vip = True
     quota_done = 5
-    my_extra_req = 0
 else:
     user_name = staff_dict[user_email]['이름']
     user_tokens = int(staff_dict[user_email].get('보유토큰', 0))
@@ -181,15 +180,13 @@ else:
     
     last_shift = str(staff_dict[user_email].get('최근할당일', ''))
     quota_done = int(staff_dict[user_email].get('할당진행도', 0)) if str(staff_dict[user_email].get('할당진행도', '')).isdigit() else 0
-    my_extra_req = int(staff_dict[user_email].get('추가요청수', 0)) if str(staff_dict[user_email].get('추가요청수', '')).isdigit() else 0
     
     # 8시가 넘어서 날짜가 바뀌었으면 할당량 초기화
     if last_shift != today_shift:
         ws_staff.update_cell(staff_row_index, 7, today_shift)
         ws_staff.update_cell(staff_row_index, 8, 0)
-        ws_staff.update_cell(staff_row_index, 9, 0)
+        ws_staff.update_cell(staff_row_index, 9, 0) # 추가요청수 초기화 (더이상 안쓰지만 호환성 유지)
         quota_done = 0
-        my_extra_req = 0
         st.cache_data.clear()
         
     has_vip = (str(staff_dict[user_email].get('VIP권한', 'X')) == 'O')
@@ -238,10 +235,11 @@ def update_token(target_name, amount, reason):
             break
             
     if target_idx:
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # 💡 [패치] 무조건 한국 표준시(KST)로 변환하고 텍스트 포맷 강제 (')
+        now_str = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
         new_token_val = old_token + amount
         ws_staff.update_cell(target_idx, 4, new_token_val)
-        ws_history.append_row([now, target_name, amount, new_token_val, reason])
+        ws_history.append_row([f"'{now_str}", target_name, amount, new_token_val, reason])
 
 def is_unlocked_recently(addr, room):
     if user_email == ADMIN_EMAIL: return True
@@ -250,7 +248,8 @@ def is_unlocked_recently(addr, room):
     for r in reversed(history_records):
         if len(r) > 4 and r[1] == user_name and search_str in r[4] and str(r[2]) == "-1":
             try:
-                record_time = datetime.strptime(r[0], '%Y-%m-%d %H:%M:%S')
+                # KST로 저장된 기록을 비교
+                record_time = datetime.strptime(r[0].replace("'", ""), '%Y-%m-%d %H:%M:%S')
                 if (now - record_time).total_seconds() <= 86400: return True
             except: continue
     return False
@@ -335,13 +334,30 @@ if st.sidebar.button("로그아웃"):
     st.session_state.clear()
     st.rerun()
 
-# --- 메인 탭 구성 ---
-tabs_list = ["🏠 홈", "🔍 매물 검색", "👤 소유주 검색", "📞 오늘의 오피콜", "📝 신규 등록", "⏰ 3개월 이내 만기"]
-if user_email == ADMIN_EMAIL: tabs_list.append("👑 관리자 전용")
-tabs = st.tabs(tabs_list)
+# --- 💡 [패치] 권한별 동적 탭 구성 (VIP 숨김 처리) ---
+tab_names = ["🏠 홈", "🔍 매물 검색", "👤 소유주 검색", "📞 오늘의 오피콜", "📝 신규 등록"]
+if has_vip or user_email == ADMIN_EMAIL:
+    tab_names.append("⏰ 3개월 이내 만기")
+if user_email == ADMIN_EMAIL:
+    tab_names.append("👑 관리자 전용")
+
+created_tabs = st.tabs(tab_names)
+t_home, t_search, t_owner, t_call, t_new = created_tabs[0], created_tabs[1], created_tabs[2], created_tabs[3], created_tabs[4]
+
+idx = 5
+if has_vip or user_email == ADMIN_EMAIL:
+    t_vip = created_tabs[idx]
+    idx += 1
+else:
+    t_vip = None
+    
+if user_email == ADMIN_EMAIL:
+    t_admin = created_tabs[idx]
+else:
+    t_admin = None
 
 # --- [탭 0] 홈 (외부 링크) ---
-with tabs[0]:
+with t_home:
     st.subheader("🏠 엘루이 업무 포털")
     st.write("부동산 실무에 필요한 필수 사이트를 바로가기 하세요.")
     
@@ -370,8 +386,10 @@ def render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room,
                 st.error("🚨 만기일은 반드시 'YYYY.MM.DD' 포맷으로 입력해주세요. (예: 2026.04.00)")
                 return False
                 
-            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            short_date = datetime.now().strftime('%y.%m.%d')
+            # 💡 [패치] 무조건 한국 표준시(KST)로 변환하고 텍스트 포맷 강제 (')
+            now_kst_dt = datetime.utcnow() + timedelta(hours=9)
+            now_str = now_kst_dt.strftime('%Y-%m-%d %H:%M:%S')
+            short_date = now_kst_dt.strftime('%y.%m.%d')
             
             # 구버전 비공개 처리
             ws_data.update_cell(row_idx, 26, "비공개")
@@ -384,8 +402,8 @@ def render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room,
             
             new_full_memo = f"{memo}\n👉 {added_log}".strip() if memo else f"👉 {added_log}"
             
-            # 새 로우 추가
-            new_row = [city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, new_btype, appr_date, viol, land_area, room_area, curr_biz, new_deposit, new_rent, fee, new_end, new_full_memo, now_str, user_name, "정상"]
+            # 새 로우 추가 (시간 텍스트 포맷 f"'{now_str}" 강제 적용)
+            new_row = [city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, new_btype, appr_date, viol, land_area, room_area, curr_biz, new_deposit, new_rent, fee, new_end, new_full_memo, f"'{now_str}", user_name, "정상"]
             ws_data.append_row(new_row)
             
             update_token(user_name, 1, f"{reward_reason} ({addr_str} {room_str})")
@@ -395,7 +413,7 @@ def render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room,
     return False
 
 # --- [탭 1] 매물 검색 (잠금 적용) ---
-with tabs[1]:
+with t_search:
     if is_locked:
         st.markdown(f"<div class='locked-tab'><h2>🔒 오늘 할당량을 먼저 완수해주세요!</h2><p>오늘의 오피콜 할당량({quota_done}/5건)을 완료해야 검색 기능을 사용할 수 있습니다.</p></div>", unsafe_allow_html=True)
     else:
@@ -471,12 +489,14 @@ with tabs[1]:
                             update_token(user_name, -1, f"매물 열람 ({addr_str} {room_str})")
                             st.session_state[unlock_key] = True
                             st.session_state[toggle_key] = True 
+                            # 💡 [패치] 캐시 기억 상실증 해결 (시트/화면 토큰 즉시 동기화)
+                            st.cache_data.clear() 
                             st.rerun()
                         else: st.error("토큰이 부족합니다. [오늘의 오피콜]이나 [신규 등록]을 통해 토큰을 모아주세요.")
                 st.write("---")
 
 # --- [탭 2] 소유주 검색 (잠금 적용) ---
-with tabs[2]:
+with t_owner:
     if is_locked:
         st.markdown(f"<div class='locked-tab'><h2>🔒 오늘 할당량을 먼저 완수해주세요!</h2><p>오늘의 오피콜 할당량({quota_done}/5건)을 완료해야 검색 기능을 사용할 수 있습니다.</p></div>", unsafe_allow_html=True)
     else:
@@ -519,101 +539,94 @@ with tabs[2]:
                             update_token(user_name, -1, f"매물 열람 ({addr_str} {room_str})")
                             st.session_state[unlock_key] = True
                             st.session_state[toggle_key] = True
+                            # 💡 [패치] 캐시 기억 상실증 해결
+                            st.cache_data.clear() 
                             st.rerun()
                         else: st.error("토큰 부족")
                 st.write("---")
 
 # --- [탭 3] 오늘의 오피콜 (강제 할당) ---
-with tabs[3]:
+with t_call:
     st.subheader(f"📞 오늘의 오피콜 (진행도: {quota_done}/5)")
-    st.write("시스템이 배정한 가장 시급한 타겟 매물입니다. 콜을 돌려 DB를 최신화해주세요! (열람 무료)")
     
-    # 1. 타겟 매물 풀(Pool) 생성
-    target_addresses_str = settings_all_values[1][1] if len(settings_all_values) > 1 else ""
-    target_addresses = [a.strip().replace(" ", "") for a in target_addresses_str.split(",") if a.strip()]
-    
-    target_pool = []
-    for r in all_records:
-        city, gu, dong, bon, bu = r[0], r[1], r[2], r[3], r[4]
-        addr_clean = f"{dong}{bon}" + (f"-{bu}" if bu and bu != "0" else "")
-        addr_clean = addr_clean.replace(" ", "")
-        
-        # 1. 오늘 이미 업데이트된 매물 제외
-        if today_shift in str(r[23]): continue 
-        
-        # 2. 연락처가 없는 매물은 애초에 할당에서 제외 (해결!)
-        if "연락처 없음" in str(r[11]) or not str(r[11]).strip(): continue
-        
-        # 3. 다른 직원의 전담 관리 매물은 할당에서 제외 (해결!)
-        full_addr_for_mgr = f"{r[0]} {r[1]} {r[2]} {r[3]}" + (f"-{r[4]}" if r[4] and str(r[4]) != "0" else "")
-        if str(r[5]): full_addr_for_mgr += f" {r[5]}"
-        mgr_name = next((m for b, m in MANAGER_BUILDINGS.items() if f" {b} " in f" {full_addr_for_mgr} "), None)
-        if mgr_name and mgr_name != user_name and user_email != ADMIN_EMAIL: continue
-
-        # 4. 타겟 주소가 '정확히' 일치하는지 확인 (in 을 == 로 변경하여 50과 50-3 겹침 해결!)
-        is_target = False
-        for ta in target_addresses:
-            if ta == addr_clean: 
-                is_target = True
-                break
-                
-        if is_target: target_pool.append(r)
-        
-    # 만기일 없거나 연락일이 오래된 순서(reg_date 오름차순)로 정렬
-    target_pool.sort(key=lambda x: str(x[23])) 
-
-    # 2. 직원별 분배 로직 (슬라이싱)
-    staff_names = sorted([r['이름'] for r in staff_records])
-    if user_name in staff_names:
-        my_idx = staff_names.index(user_name)
-    else:
-        my_idx = 0
-        
-    start_idx = (my_idx * 5) + (my_extra_req * 5)
-    end_idx = start_idx + 5
-    my_assigned_pool = target_pool[start_idx:end_idx]
-    
-    if not my_assigned_pool:
-        st.success("🎉 오늘 배정된 타겟 오피스텔 명단이 모두 소진되었습니다! (대표님께 새 타겟을 요청하세요)")
-    else:
-        for idx, row in enumerate(my_assigned_pool):
-            city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, reg_date, registrar, status, row_idx = row
-            
-            addr_str = f"{city} {gu} {dong} {bon}" + (f"-{bu}" if bu and bu != "0" else "")
-            if bldg: addr_str += f" {bldg}"
-            room_str = f"{d_dong} {room}" if d_dong and d_dong != "동없음" else f"{room}"
-            
-            st.markdown(f"**🎯 타겟: {addr_str} {room_str}** (마지막 연락: {reg_date[:10]})")
-            st.info(f"**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**기존 보증/월세:** {deposit}/{rent} | **기존 만기:** {end_date}\n\n**히스토리:**\n{memo}")
-            
-            c_pass, c_space = st.columns([1, 4])
-            if c_pass.button("⏭️ 부재중/패스 (토큰+0)", key=f"pass_{row_idx}"):
-                # 💡 [추가된 핵심 로직] 부재중 처리 시, 시트의 최근 연락일을 '지금'으로 덮어씌워서 오늘 명단에서 즉시 제외시킴
-                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                ws_data.update_cell(row_idx, 24, now_str) # 24열(등록일시) 업데이트
-                ws_data.update_cell(row_idx, 25, user_name) # 25열(등록자) 업데이트
-                
-                if user_email != ADMIN_EMAIL:
-                    ws_staff.update_cell(staff_row_index, 8, quota_done + 1)
-                st.cache_data.clear()
-                st.rerun()
-                
-            if render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, addr_str, room_str, f"task_upd_{idx}", "오피콜 갱신 완료"):
-                if user_email != ADMIN_EMAIL:
-                    ws_staff.update_cell(staff_row_index, 8, quota_done + 1)
-                st.cache_data.clear()
-                st.rerun()
-            st.write("---")
-            
+    # 💡 [패치] 무한 리필 차단 로직 적용
     if quota_done >= 5:
-        if st.button("➕ 오피콜 5개 추가 배정 요청", type="primary"):
-            if user_email != ADMIN_EMAIL:
-                ws_staff.update_cell(staff_row_index, 9, my_extra_req + 1)
-                st.cache_data.clear()
-                st.rerun()
+        st.success("🎉 오늘의 오피콜 5건을 모두 완료했습니다! 이제 잠금이 해제되어 자유롭게 매물 검색이 가능합니다.")
+        st.info("💡 토큰이 더 필요하시다면 [📝 신규 등록] 탭에서 공실클럽 빌라 매물을 추가하여 +3 토큰을 획득하세요!")
+    else:
+        st.write("시스템이 배정한 가장 시급한 타겟 매물입니다. 콜을 돌려 DB를 최신화해주세요! (열람 무료)")
+        
+        # 1. 타겟 매물 풀(Pool) 생성
+        target_addresses_str = settings_all_values[1][1] if len(settings_all_values) > 1 else ""
+        target_addresses = [a.strip().replace(" ", "") for a in target_addresses_str.split(",") if a.strip()]
+        
+        target_pool = []
+        for r in all_records:
+            city, gu, dong, bon, bu = r[0], r[1], r[2], r[3], r[4]
+            addr_clean = f"{dong}{bon}" + (f"-{bu}" if bu and bu != "0" else "")
+            addr_clean = addr_clean.replace(" ", "")
+            
+            if today_shift in str(r[23]): continue 
+            if "연락처 없음" in str(r[11]) or not str(r[11]).strip(): continue
+            
+            full_addr_for_mgr = f"{r[0]} {r[1]} {r[2]} {r[3]}" + (f"-{r[4]}" if r[4] and str(r[4]) != "0" else "")
+            if str(r[5]): full_addr_for_mgr += f" {r[5]}"
+            mgr_name = next((m for b, m in MANAGER_BUILDINGS.items() if f" {b} " in f" {full_addr_for_mgr} "), None)
+            if mgr_name and mgr_name != user_name and user_email != ADMIN_EMAIL: continue
+
+            is_target = False
+            for ta in target_addresses:
+                if ta == addr_clean: 
+                    is_target = True
+                    break
+                    
+            if is_target: target_pool.append(r)
+            
+        target_pool.sort(key=lambda x: str(x[23])) 
+
+        # 2. 직원별 분배 로직 (슬라이싱) - 남은 횟수만큼만 노출
+        staff_names = sorted([r['이름'] for r in staff_records])
+        my_idx = staff_names.index(user_name) if user_name in staff_names else 0
+            
+        start_idx = (my_idx * 5)
+        # 💡 [패치] 무한 리필을 막기 위해 5개에서 본인이 채운 만큼(quota_done) 깎아서 보여줍니다.
+        end_idx = start_idx + (5 - quota_done) 
+        my_assigned_pool = target_pool[start_idx:end_idx]
+        
+        if not my_assigned_pool:
+            st.success("🎉 오늘 배정된 타겟 오피스텔 명단이 모두 소진되었습니다! (대표님께 새 타겟을 요청하세요)")
+        else:
+            for idx, row in enumerate(my_assigned_pool):
+                city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, reg_date, registrar, status, row_idx = row
+                
+                addr_str = f"{city} {gu} {dong} {bon}" + (f"-{bu}" if bu and bu != "0" else "")
+                if bldg: addr_str += f" {bldg}"
+                room_str = f"{d_dong} {room}" if d_dong and d_dong != "동없음" else f"{room}"
+                
+                st.markdown(f"**🎯 타겟: {addr_str} {room_str}** (마지막 연락: {reg_date[:10]})")
+                st.info(f"**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**기존 보증/월세:** {deposit}/{rent} | **기존 만기:** {end_date}\n\n**히스토리:**\n{memo}")
+                
+                c_pass, c_space = st.columns([1, 4])
+                if c_pass.button("⏭️ 부재중/패스 (토큰+0)", key=f"pass_{row_idx}"):
+                    # 💡 [패치] KST 고정 및 텍스트 홑따옴표(') 강제 적용
+                    now_str = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
+                    ws_data.update_cell(row_idx, 24, f"'{now_str}") 
+                    ws_data.update_cell(row_idx, 25, user_name) 
+                    
+                    if user_email != ADMIN_EMAIL:
+                        ws_staff.update_cell(staff_row_index, 8, quota_done + 1)
+                    st.cache_data.clear()
+                    st.rerun()
+                    
+                if render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, addr_str, room_str, f"task_upd_{idx}", "오피콜 갱신 완료"):
+                    if user_email != ADMIN_EMAIL:
+                        ws_staff.update_cell(staff_row_index, 8, quota_done + 1)
+                    st.cache_data.clear()
+                    st.rerun()
+                st.write("---")
 
 # --- [탭 4] 신규 등록 ---
-with tabs[4]:
+with t_new:
     st.subheader("📝 신규 등록 (완료 시 +3 토큰 / +5점)")
     
     c_reg1, c_reg2, c_reg3 = st.columns([1, 1, 1])
@@ -659,12 +672,13 @@ with tabs[4]:
                 d_dong = "동없음" if f_sub_dong == "0" else (f"{f_sub_dong}동" if not f_sub_dong.endswith("동") else f_sub_dong)
                 r_ho = f"{f_room}호" if not f_room.endswith("호") else f_room
                 
-                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                # 💡 [패치] KST 고정 및 텍스트 홑따옴표(') 강제 적용
+                now_str = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
                 new_row = [
                     reg_sido, reg_gu, f_dong, bon, bu, 
                     "", "", d_dong, r_ho, f_name, f_birth, format_phone(f_phone), 
                     f_btype, "", "위반 없음", "", "", "", 
-                    f_deposit, f_rent, "", f_end, f_memo, now, user_name, "정상"
+                    f_deposit, f_rent, "", f_end, f_memo, f"'{now_str}", user_name, "정상"
                 ]
                 ws_data.append_row(new_row)
                 update_token(user_name, 3, f"신규 등록 ({f_dong} {bon}-{bu} {r_ho})")
@@ -673,11 +687,9 @@ with tabs[4]:
                 st.rerun()
 
 # --- [탭 5] VIP: 3개월 이내 만기 ---
-with tabs[5]:
-    st.subheader("⏰ 3개월 이내 만기 알짜 매물 (VIP 전용)")
-    if not has_vip:
-        st.error("🚫 접근 권한이 없습니다. (관리자에게 VIP 권한을 요청하세요)")
-    else:
+if t_vip:
+    with t_vip:
+        st.subheader("⏰ 3개월 이내 만기 알짜 매물 (VIP 전용)")
         st.write("향후 3개월 이내에 만기가 도래하는 매물 리스트입니다. (열람 시 토큰 -1)")
         
         now = datetime.now()
@@ -687,7 +699,6 @@ with tabs[5]:
         for r in all_records:
             e_date_str = str(r[21]).strip()
             if is_valid_date_format(e_date_str):
-                # 00일인 경우 1일로 간주
                 clean_date_str = e_date_str.replace(".00", ".01").replace(".", "-")
                 try:
                     e_date = datetime.strptime(clean_date_str, "%Y-%m-%d")
@@ -721,13 +732,15 @@ with tabs[5]:
                         update_token(user_name, -1, f"VIP 매물 열람 ({addr_str} {room_str})")
                         st.session_state[unlock_key] = True
                         st.session_state[toggle_key] = True 
+                        # 💡 [패치] 캐시 기억 상실증 해결
+                        st.cache_data.clear() 
                         st.rerun()
                     else: st.error("토큰이 부족합니다.")
             st.write("---")
 
 # --- [탭 6] 관리자 전용 ---
-if user_email == ADMIN_EMAIL:
-    with tabs[6]:
+if t_admin:
+    with t_admin:
         c_title, c_btn = st.columns([4, 1])
         c_title.subheader("👑 최고 관리자 대시보드")
         if c_btn.button("🔄 데이터 새로고침"):
@@ -744,7 +757,6 @@ if user_email == ADMIN_EMAIL:
                 st.success("타겟 주소가 업데이트되었습니다.")
                 st.rerun()
                 
-        # 타겟 진척도 계산
         total_target_rooms = 0
         completed_target_rooms = 0
         for r in all_records:
@@ -754,7 +766,7 @@ if user_email == ADMIN_EMAIL:
             
             is_target = False
             for ta in [a.strip().replace(" ", "") for a in new_target.split(",") if a.strip()]:
-                if ta == addr_clean:  # <--- 여기를 in 에서 == 로 변경
+                if ta == addr_clean:
                     is_target = True
                     break
             
@@ -778,10 +790,8 @@ if user_email == ADMIN_EMAIL:
             s_vip = r.get('VIP권한', 'X')
             s_quota = int(r.get('할당진행도', 0)) if str(r.get('할당진행도', '')).isdigit() else 0
             
-            # 오늘 할당 달성 O/X
             q_status = "✅ 달성" if s_quota >= 5 else f"❌ ({s_quota}/5)"
             
-            # 오늘 신규, 갱신 스코어 계산
             s_new, s_renew = 0, 0
             for h in history_records:
                 if len(h) > 4 and h[1] == s_name and this_month_str in h[0]:
@@ -793,7 +803,6 @@ if user_email == ADMIN_EMAIL:
             
         df_staff = pd.DataFrame(staff_display_data, columns=["직원명", "VIP권한(체크)", "오늘할당(O/X)", "잔여토큰", "이번달 신규", "이번달 갱신", "총점"])
         
-        # Streamlit Data Editor로 VIP 체크박스 직접 수정 기능 (수정된 데이터만 Sheet에 반영)
         edited_df = st.data_editor(df_staff, column_config={"VIP권한(체크)": st.column_config.CheckboxColumn("VIP권한 허용")}, disabled=["직원명", "오늘할당(O/X)", "잔여토큰", "이번달 신규", "이번달 갱신", "총점"], use_container_width=True, hide_index=True)
         
         if st.button("💾 VIP 권한 변경사항 저장"):
@@ -801,7 +810,6 @@ if user_email == ADMIN_EMAIL:
                 s_name = row['직원명']
                 new_vip = 'O' if row['VIP권한(체크)'] else 'X'
                 
-                # ws_staff에서 인덱스 찾아 업데이트 (이메일, 이름, 등록일, 토큰, 건물, VIP(6))
                 for s_idx, s_row in enumerate(staff_records):
                     if s_row['이름'] == s_name:
                         if str(s_row.get('VIP권한', 'X')) != new_vip:
@@ -818,5 +826,6 @@ if user_email == ADMIN_EMAIL:
                 grant_reason = st.text_input("사유")
                 if st.form_submit_button("지급하기") and grant_reason:
                     update_token(target_staff, grant_amount, f"수동포상: {grant_reason}")
+                    st.cache_data.clear() # 💡 수동지급 시에도 즉시 반영
                     st.success("지급 완료!")
                     st.rerun()

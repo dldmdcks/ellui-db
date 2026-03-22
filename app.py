@@ -340,8 +340,11 @@ if has_vip or user_email == ADMIN_EMAIL:
     tab_names.append("⏰ 3개월 이내 만기")
 if user_email == ADMIN_EMAIL:
     tab_names.append("👑 관리자 전용")
+
+# 👇 이 두 줄이 왼쪽 벽에 딱 붙어있어야 합니다!
 target_addresses_str = settings_all_values[1][1] if len(settings_all_values) > 1 else ""
-        target_addresses = [a.strip().replace(" ", "") for a in target_addresses_str.split(",") if a.strip()]
+target_addresses = [a.strip().replace(" ", "") for a in target_addresses_str.split(",") if a.strip()]
+
 created_tabs = st.tabs(tab_names)
 t_home, t_search, t_owner, t_call, t_new = created_tabs[0], created_tabs[1], created_tabs[2], created_tabs[3], created_tabs[4]
 

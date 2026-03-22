@@ -363,13 +363,40 @@ else:
 # --- [탭 0] 홈 (외부 링크) ---
 with t_home:
     st.subheader("🏠 엘루이 업무 포털")
-    st.write("부동산 실무에 필요한 필수 사이트를 바로가기 하세요.")
+    st.write("부동산 실무 및 권리분석에 필요한 필수 사이트 모음입니다.")
+    st.write("---")
     
-    col_link1, col_link2, col_link3, col_link4 = st.columns(4)
-    col_link1.link_button("🌐 정부24 (건축물대장)", "https://www.gov.kr/portal/main", use_container_width=True)
-    col_link2.link_button("📜 인터넷 등기소", "http://www.iros.go.kr/", use_container_width=True)
-    col_link3.link_button("📈 공실클럽", "https://www.gongsilclub.com/", use_container_width=True)
-    col_link4.link_button("🗺️ 씨리얼 (부동산정보)", "https://seereal.lh.or.kr/", use_container_width=True)
+    # 1행
+    c1, c2, c3 = st.columns(3)
+    c1.link_button("🌐 정부24 (건축물대장)", "https://www.gov.kr/portal/main", use_container_width=True)
+    c2.link_button("📜 인터넷 등기소", "http://www.iros.go.kr/", use_container_width=True)
+    c3.link_button("📈 공실클럽", "https://www.gongsilclub.com/", use_container_width=True)
+    
+    # 2행
+    c4, c5, c6 = st.columns(3)
+    c4.link_button("🗺️ 씨리얼 (부동산정보)", "https://seereal.lh.or.kr/", use_container_width=True)
+    c5.link_button("🔥 도시가스 (코원에너지)", "https://www.skens.com/koone/main/index.do#", use_container_width=True)
+    c6.link_button("⚖️ 법제처 (국가법령)", "https://www.law.go.kr/LSW/main.html", use_container_width=True)
+    
+    # 3행
+    c7, c8, c9 = st.columns(3)
+    c7.link_button("📍 밸류맵", "https://www.valueupmap.com/", use_container_width=True)
+    c8.link_button("🏦 KB부동산", "https://kbland.kr/map?xy=37.5151144,127.1133079,17", use_container_width=True)
+    c9.link_button("📊 부동산테크", "https://rtech.or.kr/land/landMap.do", use_container_width=True)
+    
+    # 4행
+    c10, c11, c12 = st.columns(3)
+    c10.link_button("🏠 렌트홈", "https://www.renthome.go.kr/webportal/main/portalMainList.open", use_container_width=True)
+    c11.link_button("🧮 부동산 계산기", "https://xn--989a00af8jnslv3dba.com/", use_container_width=True)
+    c12.link_button("💰 홈택스 (기준시가)", "https://hometax.go.kr/websquare/websquare.html?w2xPath=/ui/pp/index_pp.xml&tmIdx=47&tm2lIdx=4712090000&tm3lIdx=4712090300", use_container_width=True)
+    
+    # 5행
+    c13, c14, c15 = st.columns(3)
+    c13.link_button("📢 공시가격 알리미", "https://www.realtyprice.kr/notice/main/main.do#", use_container_width=True)
+    c14.link_button("🛡️ HUG 보증보험 확인", "https://khig.khug.or.kr/websquare/popup.html?w2xPath=/cg/ae/CGAE034P02.xml&popupID=help&idx=idx10_16146745922339600.17851819347&w2xHome=/login/&w2xDocumentRoot=", use_container_width=True)
+    c15.link_button("🏗️ 세움터", "https://www.eais.go.kr/", use_container_width=True)
+    
+    st.write("---")
 
 # --- 공통 함수: 수정/갱신 폼 렌더링 ---
 def render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, addr_str, room_str, form_key, reward_reason):

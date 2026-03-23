@@ -536,7 +536,18 @@ with t_owner:
                 if bldg: addr_str += f" {bldg}"
                 room_str = f"{d_dong} {room}" if d_dong and d_dong != "동없음" else f"{room}"
                 
-                st.markdown(f"**👤 {name}({birth}) | 📍 {addr_str} {room_str}**")
+                # 💡 [추가된 로직] 매물 검색과 동일한 관리건물 잠금 기능 적용
+                manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if f" {b} " in f" {addr_str} "), None)
+                is_manager_locked = manager_name and manager_name != user_name and user_email != ADMIN_EMAIL
+                m_tag = f" | 👑 {manager_name} 관리매물" if manager_name else ""
+                
+                st.markdown(f"**👤 {name}({birth}) | 📍 {addr_str} {room_str} {m_tag}**")
+
+                if is_manager_locked:
+                    st.error(f"🔒 {manager_name} 전담 매물입니다. (열람 불가)")
+                    st.write("---")
+                    continue
+                # ----------------------------------------------------
 
                 unlock_key = f"unlock_own_{addr_str}_{room_str}"
                 toggle_key = f"toggle_own_{idx}"

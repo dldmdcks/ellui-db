@@ -141,10 +141,12 @@ except:
     ws_history = ss.add_worksheet(title="토큰내역", rows="100", cols="5")
     ws_history.append_row(["일시", "직원명", "변동량", "잔여토큰", "사유_상세"])
 
+# 💡 [공지사항 패치] 환경설정 시트에 공지사항 칸 확보
 try: ws_settings = ss.worksheet("환경설정")
 except:
     ws_settings = ss.add_worksheet(title="환경설정", rows="10", cols="2")
     ws_settings.append_row(["타겟주소", "방이동 43-2, 방이동 39"])
+    ws_settings.append_row(["공지사항", ""])
 
 @st.cache_data(ttl=60)
 def fetch_all_data():
@@ -222,10 +224,11 @@ def update_token(target_name, amount, reason):
             break
             
     if target_idx:
+        # 💡 [정렬 버그 패치] 홑따옴표(') 제거
         now_str = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
         new_token_val = old_token + amount
         ws_staff.update_cell(target_idx, 4, new_token_val)
-        ws_history.append_row([f"'{now_str}", target_name, amount, new_token_val, reason])
+        ws_history.append_row([now_str, target_name, amount, new_token_val, reason], value_input_option='USER_ENTERED')
 
 def is_unlocked_recently(addr, room):
     if user_email == ADMIN_EMAIL: return True
@@ -234,6 +237,7 @@ def is_unlocked_recently(addr, room):
     for r in reversed(history_records):
         if len(r) > 4 and r[1] == user_name and search_str in r[4] and str(r[2]) == "-1":
             try:
+                # 💡 [정렬 버그 패치] 호환성을 위해 replace 유지 (예전 데이터 처리용)
                 record_time = datetime.strptime(r[0].replace("'", ""), '%Y-%m-%d %H:%M:%S')
                 if (now - record_time).total_seconds() <= 86400: return True
             except: continue
@@ -257,7 +261,6 @@ for r in all_records_raw:
 for r in history_records:
     if len(r) > 4 and r[1] == user_name and this_month_str in r[0]:
         if "갱신" in r[4] or "수정" in r[4]:
-            # 💡 [패치] 오피스텔/아파트는 3점, 나머지는 1점
             if "[아파트]" in r[4] or "[오피스텔]" in r[4]:
                 my_month_score += 3
             else:
@@ -327,15 +330,21 @@ if st.sidebar.button("로그아웃"):
     st.session_state.clear()
     st.rerun()
 
-# --- 💡 [패치] 권한별 동적 탭 구성 (VIP 숨김 처리) ---
+# --- 💡 [패치] 설정값 불러오기 (공지사항 포함) ---
+try:
+    target_addresses_str = settings_all_values[1][1] if len(settings_all_values) > 1 else ""
+    notice_text = settings_all_values[2][1] if len(settings_all_values) > 2 else ""
+except IndexError:
+    target_addresses_str = ""
+    notice_text = ""
+
+target_addresses = [a.strip().replace(" ", "") for a in target_addresses_str.split(",") if a.strip()]
+
 tab_names = ["🏠 홈", "🔍 매물 검색", "👤 소유주 검색", "📞 오늘의 오피콜", "📝 신규 등록"]
 if has_vip or user_email == ADMIN_EMAIL:
     tab_names.append("⏰ 3개월 이내 만기")
 if user_email == ADMIN_EMAIL:
     tab_names.append("👑 관리자 전용")
-
-target_addresses_str = settings_all_values[1][1] if len(settings_all_values) > 1 else ""
-target_addresses = [a.strip().replace(" ", "") for a in target_addresses_str.split(",") if a.strip()]
 
 created_tabs = st.tabs(tab_names)
 t_home, t_search, t_owner, t_call, t_new = created_tabs[0], created_tabs[1], created_tabs[2], created_tabs[3], created_tabs[4]
@@ -352,12 +361,20 @@ if user_email == ADMIN_EMAIL:
 else:
     t_admin = None
 
-# --- [탭 0] 홈 (외부 링크) ---
+# --- [탭 0] 홈 (외부 링크 & 내부망) ---
 with t_home:
     st.subheader("🏠 엘루이 업무 포털")
-    st.write("부동산 실무 및 권리분석에 필요한 필수 사이트 모음입니다.")
-    st.write("---")
     
+    # 💡 [공지사항 노출 패치]
+    if notice_text:
+        st.info(f"📢 **[전체 공지사항]**\n\n{notice_text}")
+    
+    st.write("---")
+    st.markdown("#### 🔗 엘루이 내부 업무망")
+    st.link_button("📊 오피콜 마스터 DB 시트 바로가기 (수동작업용)", "https://docs.google.com/spreadsheets/d/11WZhFnPPIduKVSy3UG0-L1BrXRdddCBhzQLZGMVBSXc/edit?gid=1257534628#gid=1257534628", type="primary", use_container_width=True)
+    
+    st.write("---")
+    st.markdown("#### 🌐 부동산 필수 사이트")
     c1, c2, c3 = st.columns(3)
     c1.link_button("🌐 정부24 (건축물대장)", "https://www.gov.kr/portal/main", use_container_width=True)
     c2.link_button("📜 인터넷 등기소", "http://www.iros.go.kr/", use_container_width=True)
@@ -384,8 +401,26 @@ with t_home:
     c15.link_button("🏗️ 세움터", "https://www.eais.go.kr/", use_container_width=True)
     
     st.write("---")
+    st.markdown("#### 🤝 엘루이 제휴 및 협력 업체")
+    c_p1, c_p2 = st.columns(2)
+    with c_p1:
+        st.markdown("""
+        <div style='background-color:#f0f2f6; padding:15px; border-radius:10px;'>
+        <b>🧹 청소 전문업체 [하루한집]</b><br>
+        • <b>대표:</b> 노종혁<br>
+        • <b>연락처:</b> 010-7675-6147 (입주/이사/특수/준공 청소 등)<br>
+        • <b>계좌번호:</b> 카카오뱅크 3333-10-7916932
+        </div>
+        """, unsafe_allow_html=True)
+    with c_p2:
+        st.markdown("""
+        <div style='background-color:#f0f2f6; padding:15px; border-radius:10px;'>
+        <b>🛠️ 전속 수리업체</b><br>
+        • ⏳ <i>명함 도착 대기 중 (정보 들어오는 대로 업데이트 예정)</i><br><br><br>
+        </div>
+        """, unsafe_allow_html=True)
 
-# --- 공통 함수: 수정/갱신 폼 렌더링 (보상 금액 추가) ---
+# --- 공통 함수: 수정/갱신 폼 렌더링 (보상 금액 및 0원 단위 입력 적용) ---
 def render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, addr_str, room_str, form_key, reward_reason, reward_amount):
     with st.form(f"edit_{form_key}", clear_on_submit=True):
         st.caption("※ 항목을 명확히 나누어 입력해주세요. 기존 내역은 타임라인으로 누적 보존됩니다.")
@@ -394,9 +429,12 @@ def render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room,
         type_opts = ["아파트", "오피스텔", "다세대", "다가구", "빌라", "상가", "미분류"]
         t_idx = type_opts.index(b_type) if b_type in type_opts else 0
         new_btype = c1.selectbox("용도", type_opts, index=t_idx)
-        new_deposit = c2.text_input("보증금(숫자)", value=str(deposit))
-        new_rent = c3.text_input("월세(숫자)", value=str(rent))
+        
+        # 💡 [입력 포맷 패치] 0원 단위 전체 숫자로 안내 변경
+        new_deposit = c2.text_input("보증금 (0원 단위. 예: 10000000)", value=str(deposit))
+        new_rent = c3.text_input("월세 (0원 단위)", value=str(rent))
         new_end = c4.text_input("만기일 (예: 2026.04.00)", value=str(end_date), placeholder="2026.04.00")
+        
         new_memo_add = st.text_input("추가 특이사항 (예: 보증금 조절 가능, 강아지 환영)")
         
         if st.form_submit_button(f"🛠️ 데이터 갱신 및 자동 반영 (+{reward_amount} 토큰)"):
@@ -404,6 +442,7 @@ def render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room,
                 st.error("🚨 만기일은 반드시 'YYYY.MM.DD' 포맷으로 입력해주세요. (예: 2026.04.00)")
                 return False
                 
+            # 💡 [정렬 버그 패치] 홑따옴표(') 제거
             now_kst_dt = datetime.utcnow() + timedelta(hours=9)
             now_str = now_kst_dt.strftime('%Y-%m-%d %H:%M:%S')
             short_date = now_kst_dt.strftime('%y.%m.%d')
@@ -417,10 +456,10 @@ def render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room,
             
             new_full_memo = f"{memo}\n👉 {added_log}".strip() if memo else f"👉 {added_log}"
             
-            new_row = [city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, new_btype, appr_date, viol, land_area, room_area, curr_biz, new_deposit, new_rent, fee, new_end, new_full_memo, f"'{now_str}", user_name, "정상"]
-            ws_data.append_row(new_row)
+            # 💡 USER_ENTERED 옵션을 통해 날짜로 정상 인식되게 함
+            new_row = [city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, new_btype, appr_date, viol, land_area, room_area, curr_biz, new_deposit, new_rent, fee, new_end, new_full_memo, now_str, user_name, "정상"]
+            ws_data.append_row(new_row, value_input_option='USER_ENTERED')
             
-            # 💡 [패치] 보상 내역에 용도를 함께 기록하여 랭킹 점수 계산에 반영되게 함
             update_token(user_name, reward_amount, f"{reward_reason} ({addr_str} {room_str}) [{new_btype}]")
             st.cache_data.clear()
             st.success(f"✅ 데이터가 최신화되었습니다! (토큰 +{reward_amount})")
@@ -463,6 +502,7 @@ with t_search:
                 match_r = (r_search.replace(" ","") in room_target.replace(" ","")) if r_search else True
                 
                 if match_sido and match_sigungu and match_dong and match_b and match_r: res.append(r)
+            # 💡 [정렬 버그 패치] 내부적으로 숫자만 발라내서 완벽한 오름차순 적용 완료됨
             res.sort(key=lambda x: extract_room_number(x[8]))
             st.session_state.addr_search_res = res
         
@@ -496,7 +536,6 @@ with t_search:
                     if st.session_state.get(toggle_key, False):
                         st.info(f"**용도:** {b_type}\n\n**소유주:** {name}({birth}) | **연락처:** {phone}\n\n**보증/월세:** {deposit}/{rent} | **만기:** {end_date}\n\n**특이사항/히스토리:**\n{memo}")
                         
-                        # 💡 일반 검색 갱신 보상은 +2 토큰
                         if render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, addr_str, room_str, f"addr_upd_{idx}", "일반 검색 갱신", 2):
                             st.rerun()
                 else:
@@ -535,7 +574,6 @@ with t_owner:
                 if bldg: addr_str += f" {bldg}"
                 room_str = f"{d_dong} {room}" if d_dong and d_dong != "동없음" else f"{room}"
                 
-                # 💡 [백도어 차단 패치]
                 manager_name = next((m for b, m in MANAGER_BUILDINGS.items() if f" {b} " in f" {addr_str} "), None)
                 is_manager_locked = manager_name and manager_name != user_name and user_email != ADMIN_EMAIL
                 m_tag = f" | 👑 {manager_name} 관리매물" if manager_name else ""
@@ -557,7 +595,6 @@ with t_owner:
                     if st.session_state.get(toggle_key, False):
                         st.info(f"**용도:** {b_type}\n\n**연락처:** {phone} | **만기/보/월:** {end_date} / {deposit} / {rent}\n\n**특이사항/히스토리:**\n{memo}")
                         
-                        # 💡 소유주 검색 갱신 보상은 +2 토큰
                         if render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, addr_str, room_str, f"own_upd_{idx}", "소유주 검색 갱신", 2):
                             st.rerun()
                 else:
@@ -628,7 +665,8 @@ with t_call:
                 c_pass, c_space = st.columns([1, 4])
                 if c_pass.button("⏭️ 부재중/패스 (토큰+0)", key=f"pass_{row_idx}"):
                     now_str = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
-                    ws_data.update_cell(row_idx, 24, f"'{now_str}") 
+                    # 💡 [정렬 버그 패치] 홑따옴표 없이 덮어쓰기
+                    ws_data.update_cell(row_idx, 24, now_str) 
                     ws_data.update_cell(row_idx, 25, user_name) 
                     
                     if user_email != ADMIN_EMAIL:
@@ -636,7 +674,6 @@ with t_call:
                     st.cache_data.clear()
                     st.rerun()
                     
-                # 💡 오피콜 갱신 보상은 +1 토큰
                 if render_edit_form(row_idx, city, gu, dong, bon, bu, road, bldg, d_dong, room, name, birth, phone, b_type, appr_date, viol, land_area, room_area, curr_biz, deposit, rent, fee, end_date, memo, addr_str, room_str, f"task_upd_{idx}", "오피콜 갱신 완료", 1):
                     if user_email != ADMIN_EMAIL:
                         ws_staff.update_cell(staff_row_index, 8, quota_done + 1)
@@ -673,9 +710,10 @@ with t_new:
         f_birth = r2_c2.text_input("생년월일 (숫자만)", placeholder="940101")
         f_phone = r2_c3.text_input("연락처 (숫자만)", placeholder="01012345678")
         
+        # 💡 [입력 포맷 패치] 0원 단위 변경
         r3_c1, r3_c2, r3_c3 = st.columns(3)
-        f_deposit = r3_c1.text_input("보증금 (만원)")
-        f_rent = r3_c2.text_input("월세 (만원)")
+        f_deposit = r3_c1.text_input("보증금 (0원 단위. 예: 10000000)")
+        f_rent = r3_c2.text_input("월세 (0원 단위)")
         f_end = r3_c3.text_input("만기일 (필수 YYYY.MM.DD)", placeholder="2026.04.00")
         
         f_memo = st.text_area("특이사항", placeholder="예: 애완가능, 주차가능 등")
@@ -717,14 +755,15 @@ with t_new:
                     if accumulated_memo:
                         final_memo = f"{final_memo}\n------------------\n👉 [과거 히스토리]\n{accumulated_memo}".strip()
 
+                    # 💡 [정렬 버그 패치] 홑따옴표 없이, USER_ENTERED 옵션으로 삽입
                     new_row = [
                         reg_sido, reg_gu, f_dong, bon, bu, 
                         "", "", d_dong, r_ho, f_name, f_birth, format_phone(f_phone), 
                         f_btype, "", "위반 없음", "", "", "", 
-                        f_deposit, f_rent, "", f_end, final_memo, f"'{now_str}", user_name, "정상"
+                        f_deposit, f_rent, "", f_end, final_memo, now_str, user_name, "정상"
                     ]
-                    ws_data.append_row(new_row)
-                    # 💡 신규 등록은 묻지도 따지지도 않고 +3 토큰 (용도 꼬리표 포함)
+                    ws_data.append_row(new_row, value_input_option='USER_ENTERED')
+                    
                     update_token(user_name, 3, f"신규 등록 ({f_dong} {bon}-{bu} {r_ho}) [{f_btype}]")
                     st.cache_data.clear() 
                     st.success("✅ 신규 매물 등록 완료! 토큰 +3개 자동 지급!")
@@ -791,10 +830,22 @@ if t_admin:
             st.rerun()
             
         st.write("---")
+        
+        # 💡 [공지사항 패치] 전사 공지 작성 폼
+        st.markdown("#### 📢 전체 공지사항 설정")
+        with st.form("notice_form"):
+            new_notice = st.text_area("공지사항 내용 입력", value=notice_text, placeholder="홈 화면 상단에 띄울 공지사항을 입력하세요.")
+            if st.form_submit_button("공지사항 저장"):
+                ws_settings.update_cell(3, 2, new_notice)
+                st.cache_data.clear()
+                st.success("공지사항이 업데이트되어 홈 화면에 노출됩니다.")
+                st.rerun()
+                
+        st.write("---")
         st.markdown("#### 🎯 오피콜 타겟 설정 및 진척도")
         with st.form("target_form"):
             new_target = st.text_input("이번 주 집중 타겟 주소 (쉼표로 구분)", value=target_addresses_str, placeholder="예: 방이동 43-2, 방이동 39")
-            if st.form_submit_button("저장"):
+            if st.form_submit_button("타겟 주소 저장"):
                 ws_settings.update_cell(2, 2, new_target)
                 st.cache_data.clear()
                 st.success("타겟 주소가 업데이트되었습니다.")
@@ -813,7 +864,6 @@ if t_admin:
                     is_target = True
                     break
             
-            # 💡 [패치] 타겟 건물 중 "만기일이 작성된 호실"만 세어서 진척도 계산
             if is_target:
                 total_target_rooms += 1
                 if str(r[21]).strip() != "": 
@@ -837,7 +887,6 @@ if t_admin:
             
             q_status = "✅ 달성" if s_quota >= 5 else f"❌ ({s_quota}/5)"
             
-            # 💡 랭킹 계산: 아파트/오피스텔 갱신 3점, 그 외 갱신 1점 분리 적용
             s_new, s_renew_apt, s_renew_gen = 0, 0, 0
             for h in history_records:
                 if len(h) > 4 and h[1] == s_name and this_month_str in h[0]:

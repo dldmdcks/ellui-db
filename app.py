@@ -371,7 +371,10 @@ with t_home:
     
     st.write("---")
     st.markdown("#### 🔗 엘루이 내부 업무망")
-    st.link_button("📊 오피콜 마스터 DB 시트 바로가기 (수동작업용)", "https://docs.google.com/spreadsheets/d/11WZhFnPPIduKVSy3UG0-L1BrXRdddCBhzQLZGMVBSXc/edit?gid=1257534628#gid=1257534628", type="primary", use_container_width=True)
+    
+    # 💡 [버튼 크기 축소 패치] 일반 링크 버튼들과 동일한 크기로 배치
+    c_in1, c_in2, c_in3 = st.columns(3)
+    c_in1.link_button("📊 오피콜 시트", "https://docs.google.com/spreadsheets/d/11WZhFnPPIduKVSy3UG0-L1BrXRdddCBhzQLZGMVBSXc/edit?gid=1257534628#gid=1257534628", use_container_width=True)
     
     st.write("---")
     st.markdown("#### 🌐 부동산 필수 사이트")
@@ -402,6 +405,8 @@ with t_home:
     
     st.write("---")
     st.markdown("#### 🤝 엘루이 제휴 및 협력 업체")
+    
+    # 💡 [업체 명함 업데이트 패치]
     c_p1, c_p2 = st.columns(2)
     with c_p1:
         st.markdown("""
@@ -409,14 +414,16 @@ with t_home:
         <b>🧹 청소 전문업체 [하루한집]</b><br>
         • <b>대표:</b> 노종혁<br>
         • <b>연락처:</b> 010-7675-6147 (입주/이사/특수/준공 청소 등)<br>
-        • <b>계좌번호:</b> 카카오뱅크 3333-10-7916932
+        • <b>계좌번호:</b> 카카오뱅크 3333-10-7916932 노종혁
         </div>
         """, unsafe_allow_html=True)
     with c_p2:
         st.markdown("""
         <div style='background-color:#f0f2f6; padding:15px; border-radius:10px;'>
-        <b>🛠️ 전속 수리업체</b><br>
-        • ⏳ <i>명함 도착 대기 중 (정보 들어오는 대로 업데이트 예정)</i><br><br><br>
+        <b>🛠️ 전속 수리업체 [집고 송파동점]</b><br>
+        • <b>지점장:</b> 신재경<br>
+        • <b>연락처:</b> 010-3964-8272 (검증된 기술, 확실한 AS)<br>
+        • <b>계좌번호:</b> 카카오뱅크 3333-1709-93139 신재경
         </div>
         """, unsafe_allow_html=True)
 
@@ -502,7 +509,7 @@ with t_search:
                 match_r = (r_search.replace(" ","") in room_target.replace(" ","")) if r_search else True
                 
                 if match_sido and match_sigungu and match_dong and match_b and match_r: res.append(r)
-            # 💡 [정렬 버그 패치] 내부적으로 숫자만 발라내서 완벽한 오름차순 적용 완료됨
+            # 💡 [정렬 버그 패치] 내부적으로 숫자만 발라내서 완벽한 오름차순 적용
             res.sort(key=lambda x: extract_room_number(x[8]))
             st.session_state.addr_search_res = res
         

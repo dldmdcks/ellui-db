@@ -72,18 +72,20 @@ KOREA_REGION_DATA = {
 }
 
 # 2. 로그인 및 DB 연결 설정
+import os
+
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
     token_dict = json.loads(st.secrets["google_token_json"])
     CLIENT_ID = creds_dict["web"]["client_id"]
     CLIENT_SECRET = creds_dict["web"]["client_secret"]
-    import os
 
-# 현재 서버가 렌더(Render)인지 확인하고 알아서 귀가 주소 변경하기
-if os.getenv("RENDER"):
-    auto_redirect_uri = "https://ellui-db.onrender.com/"
-else:
-    auto_redirect_uri = "https://ellui-db.streamlit.app/"
+    # 현재 서버가 렌더(Render)인지 확인하고 알아서 귀가 주소 변경하기
+    if os.getenv("RENDER"):
+        auto_redirect_uri = "https://ellui-db.onrender.com/"
+    else:
+        auto_redirect_uri = "https://ellui-db.streamlit.app/"
+
 except Exception:
     st.error("❌ 금고 설정(Secrets)을 확인해주세요.")
     st.stop()

@@ -73,6 +73,7 @@ KOREA_REGION_DATA = {
 
 # 2. 로그인 및 DB 연결 설정
 import os
+import json
 
 try:
     creds_dict = json.loads(st.secrets["credentials_json"])
@@ -80,11 +81,8 @@ try:
     CLIENT_ID = creds_dict["web"]["client_id"]
     CLIENT_SECRET = creds_dict["web"]["client_secret"]
 
-    # 현재 서버가 렌더(Render)인지 확인하고 알아서 귀가 주소 변경하기
-    if os.getenv("RENDER"):
-        REDIRECT_URI = "https://ellui-db.onrender.com/"
-    else:
-        REDIRECT_URI = "https://ellui-db.streamlit.app/"
+    # 💡 금고(Secrets)에 적혀있는 주소를 그대로 꺼내서 쓰기 (제일 확실함!)
+    REDIRECT_URI = creds_dict["web"]["redirect_uris"][0]
 
 except Exception:
     st.error("❌ 금고 설정(Secrets)을 확인해주세요.")

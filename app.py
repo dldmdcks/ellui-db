@@ -10,6 +10,11 @@ import pandas as pd
 
 # --- 💡 1. UI 다이어트 & 설정 ---
 st.set_page_config(page_title="엘루이 업무포털", page_icon="🏢", layout="wide")
+import os
+
+# 🚨 [마법의 방어막] 랜더(Render)가 아니면 왼쪽 다중 페이지 메뉴판을 투명 망토로 숨겨라!
+if not os.getenv("RENDER"):
+    st.markdown('<style>[data-testid="stSidebarNav"] {display: none !important;}</style>', unsafe_allow_html=True)
 st.markdown("""
     <style>
         html, body, [class*="css"]  { font-size: 14px !important; }

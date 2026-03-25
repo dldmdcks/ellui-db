@@ -4,7 +4,7 @@ from google.oauth2.credentials import Credentials
 from datetime import datetime, timedelta
 import json
 import re
-import requests  # 🚀 카카오워크 발송을 위한 통신 부품 추가!
+import requests
 
 # 🚨 [보안 방어막] 로그인 안 한 유저는 로비로 쫓아내기
 if "connected" not in st.session_state or not st.session_state.connected:
@@ -155,25 +155,19 @@ with st.form("contract_report_form", clear_on_submit=False):
     submitted = st.form_submit_button("🚀 계약 결재 올리기 (데이터 저장)", type="primary", use_container_width=True)
     
     if submitted:
-        # 1. 금액 숫자 확인
+        # 유효성 검사 모음
         if not deposit.isdigit() or not rent.isdigit():
             st.error("🚨 보증금과 월세는 '원'이나 콤마(,) 없이 오직 숫자만 입력해주세요!")
-        # 2. 보증금 천원 단위 차단 (0 제외)
         elif deposit != "0" and not deposit.endswith("0000"):
             st.error("🚨 보증금 입력이 잘못되었습니다. (끝자리가 0000으로 끝나야 합니다.)")
-        # 3. 이름 숫자 차단
         elif any(char.isdigit() for char in landlord_name):
             st.error("🚨 임대인 성함에는 숫자를 포함할 수 없습니다.")
-        # 4. 생년월일 6자리 숫자 확인
         elif not landlord_birth.isdigit() or len(landlord_birth) != 6:
             st.error("🚨 생년월일은 6자리의 숫자만 입력해주세요. (예: 941022)")
-        # 5. 연락처 9~11자리 숫자 확인
         elif not landlord_phone.isdigit() or not (9 <= len(landlord_phone) <= 11):
             st.error("🚨 연락처는 9~11자리의 숫자만 입력해주세요. (하이픈 - 제외)")
-        # 6. 날짜 포맷 (YYYY.MM.DD) 확인
         elif not is_valid_date_format(move_in) or not is_valid_date_format(move_out):
             st.error("🚨 입주일과 퇴실일은 반드시 'YYYY.MM.DD' 포맷(예: 2026.04.00)으로 입력해주세요!")
-        # 7. 필수 항목 누락 검사
         elif not bunji or not room or not landlord_name or not move_in or not move_out:
             st.error("🚨 번지, 호수, 입주/퇴실일, 임대인 성함은 필수 입력 사항입니다!")
         else:
@@ -187,11 +181,10 @@ with st.form("contract_report_form", clear_on_submit=False):
                 
             now_kst = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
             
-            # 💡 생년월일과 연락처 앞에 홑따옴표(')를 붙여서 0 보존
             safe_birth = f"'{landlord_birth}"
             safe_phone = f"'{landlord_phone}"
             
-            # 1️⃣ 시트에 저장
+            # 1️⃣ 구글 시트에 저장
             new_row = [
                 now_kst, user_name, deal_type, 
                 sido, gu, dong, bon, bu, d_dong, r_ho, 
@@ -204,16 +197,22 @@ with st.form("contract_report_form", clear_on_submit=False):
             try:
                 webhook_url = "https://kakaowork.com/bots/hook/4a5be71f2c424dfa8a6926ddfbd75ebe"
                 
-                # 금액에 콤마(,) 찍어주기 (예: 10000000 -> 10,000,000)
+                # 금액 콤마 처리
                 formatted_deposit = f"{int(deposit):,}" if deposit.isdigit() else deposit
                 formatted_rent = f"{int(rent):,}" if rent.isdigit() else rent
                 
-                # 단톡방 양식에 맞게 메시지 조립
-                msg_text = f"""{deal_type}
--주소 : {dong} {bunji} {sub_dong} {room}호
--보증금 : {formatted_deposit}원, {formatted_rent}원
--입주 : {move_in}~{move_out}
--계약일 : {contract_date}
+                # 💡 [핵심 패치] 주소의 '동' 표시 로직 추가 (비어있으면 안 붙이고, 있으면 '동' 붙이기)
+                display_sub_dong = ""
+                if sub_dong:
+                    display_sub_dong = f" {sub_dong}동" if not sub_dong.endswith("동") else f" {sub_dong}"
+                
+                # 💡 [핵심 패치] 단톡방 양식 완벽하게 대표님 요청대로 수정!
+                msg_text = f"""{deal_type} {user_name}
+-주소 : {dong} {bunji}번지{display_sub_dong} {r_ho}
+-보증금 : {formatted_deposit}원
+-월세 : {formatted_rent}원
+-잔금 : {move_in}
+-만기 : {move_out}
 {memo}"""
 
                 payload = {"text": msg_text}

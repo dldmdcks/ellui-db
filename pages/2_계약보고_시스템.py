@@ -58,6 +58,10 @@ KOREA_REGION_DATA = {
     "제주특별자치도": {"제주시": [], "서귀포시": []}
 }
 
+# --- 💡 날짜 포맷 검증 함수 (YYYY.MM.DD) ---
+def is_valid_date_format(date_str):
+    return bool(re.match(r'^\d{4}\.\d{2}\.\d{2}$', str(date_str).strip()))
+
 # --- 💡 DB 연결 및 시트 세팅 ---
 try:
     token_dict = json.loads(st.secrets["google_token_json"])
@@ -132,8 +136,8 @@ with st.form("contract_report_form", clear_on_submit=False):
     
     c_date1, c_date2, c_date3 = st.columns(3)
     contract_date = c_date1.text_input("✍️ 계약일 (자동입력)", value=today_str, disabled=True)
-    move_in = c_date2.text_input("🗓️ 입주일", placeholder="2026.04.10")
-    move_out = c_date3.text_input("🗓️ 퇴실일 (만기일)", placeholder="2028.04.09")
+    move_in = c_date2.text_input("🗓️ 입주일 (YYYY.MM.DD)", placeholder="2026.04.10")
+    move_out = c_date3.text_input("🗓️ 퇴실일 (YYYY.MM.DD)", placeholder="2028.04.09")
     
     st.write("---")
     st.subheader("👤 임대인 정보")
@@ -141,11 +145,9 @@ with st.form("contract_report_form", clear_on_submit=False):
     landlord_name = c_info1.text_input("성함", placeholder="이응찬")
     landlord_birth = c_info2.text_input("생년월일 (6자리 숫자만)", placeholder="941022")
     
-    # 💡 단타일 경우 힌트(placeholder) 자동 변경
     phone_ph = "임차측일 시 024214988 입력" if deal_type == "단타" else "01012345678"
     landlord_phone = c_info3.text_input("연락처 (숫자만 9~11자리)", placeholder=phone_ph)
     
-    # 💡 단타일 경우 힌트(placeholder) 자동 변경
     memo_ph = "예: ㅇㅇㅇ부동산 공동중개" if deal_type == "단타" else "기타 특이사항 입력"
     memo = st.text_area("📋 비고 및 특별사항", placeholder=memo_ph)
     
@@ -167,28 +169,32 @@ with st.form("contract_report_form", clear_on_submit=False):
         # 5. 연락처 9~11자리 숫자 확인
         elif not landlord_phone.isdigit() or not (9 <= len(landlord_phone) <= 11):
             st.error("🚨 연락처는 9~11자리의 숫자만 입력해주세요. (하이픈 - 제외)")
-        # 6. 필수 항목 누락 검사
+        # 6. 날짜 포맷 (YYYY.MM.DD) 확인 💡[핵심 패치]
+        elif not is_valid_date_format(move_in) or not is_valid_date_format(move_out):
+            st.error("🚨 입주일과 퇴실일은 반드시 'YYYY.MM.DD' 포맷(예: 2026.04.00)으로 입력해주세요!")
+        # 7. 필수 항목 누락 검사
         elif not bunji or not room or not landlord_name or not move_in or not move_out:
             st.error("🚨 번지, 호수, 입주/퇴실일, 임대인 성함은 필수 입력 사항입니다!")
         else:
-            # 💡 번지 쪼개기 (본번 / 부번)
             if "-" in bunji:
                 bon, bu = bunji.split("-", 1)
             else:
                 bon, bu = bunji, "0"
                 
-            # 💡 동/호수 규격화
             d_dong = "동없음" if not sub_dong else (f"{sub_dong}동" if not sub_dong.endswith("동") else sub_dong)
             r_ho = f"{room}호" if not room.endswith("호") else room
                 
             now_kst = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
             
-            # 메인 DB와 완벽하게 1:1 대응되는 배열 세팅
+            # 💡 [핵심 패치] 생년월일과 연락처 앞에 홑따옴표(')를 붙여서 0이 사라지는 것을 완벽 차단!
+            safe_birth = f"'{landlord_birth}"
+            safe_phone = f"'{landlord_phone}"
+            
             new_row = [
                 now_kst, user_name, deal_type, 
                 sido, gu, dong, bon, bu, d_dong, r_ho, 
                 deposit, rent, move_in, move_out, contract_date, 
-                landlord_name, landlord_birth, landlord_phone, memo
+                landlord_name, safe_birth, safe_phone, memo
             ]
             ws_contract.append_row(new_row, value_input_option='USER_ENTERED')
             

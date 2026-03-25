@@ -4,6 +4,7 @@ from google.oauth2.credentials import Credentials
 from datetime import datetime, timedelta
 import json
 import re
+import requests  # 🚀 카카오워크 발송을 위한 통신 부품 추가!
 
 # 🚨 [보안 방어막] 로그인 안 한 유저는 로비로 쫓아내기
 if "connected" not in st.session_state or not st.session_state.connected:
@@ -169,7 +170,7 @@ with st.form("contract_report_form", clear_on_submit=False):
         # 5. 연락처 9~11자리 숫자 확인
         elif not landlord_phone.isdigit() or not (9 <= len(landlord_phone) <= 11):
             st.error("🚨 연락처는 9~11자리의 숫자만 입력해주세요. (하이픈 - 제외)")
-        # 6. 날짜 포맷 (YYYY.MM.DD) 확인 💡[핵심 패치]
+        # 6. 날짜 포맷 (YYYY.MM.DD) 확인
         elif not is_valid_date_format(move_in) or not is_valid_date_format(move_out):
             st.error("🚨 입주일과 퇴실일은 반드시 'YYYY.MM.DD' 포맷(예: 2026.04.00)으로 입력해주세요!")
         # 7. 필수 항목 누락 검사
@@ -186,10 +187,11 @@ with st.form("contract_report_form", clear_on_submit=False):
                 
             now_kst = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
             
-            # 💡 [핵심 패치] 생년월일과 연락처 앞에 홑따옴표(')를 붙여서 0이 사라지는 것을 완벽 차단!
+            # 💡 생년월일과 연락처 앞에 홑따옴표(')를 붙여서 0 보존
             safe_birth = f"'{landlord_birth}"
             safe_phone = f"'{landlord_phone}"
             
+            # 1️⃣ 시트에 저장
             new_row = [
                 now_kst, user_name, deal_type, 
                 sido, gu, dong, bon, bu, d_dong, r_ho, 
@@ -198,5 +200,29 @@ with st.form("contract_report_form", clear_on_submit=False):
             ]
             ws_contract.append_row(new_row, value_input_option='USER_ENTERED')
             
-            st.success("🎉 완벽합니다! 계약 데이터가 메인 DB 규격에 맞춰 분리 저장되었습니다!")
-            st.balloons()
+            # 2️⃣ 카카오워크 봇 알림 발송 🚀
+            try:
+                webhook_url = "https://kakaowork.com/bots/hook/4a5be71f2c424dfa8a6926ddfbd75ebe"
+                
+                # 금액에 콤마(,) 찍어주기 (예: 10000000 -> 10,000,000)
+                formatted_deposit = f"{int(deposit):,}" if deposit.isdigit() else deposit
+                formatted_rent = f"{int(rent):,}" if rent.isdigit() else rent
+                
+                # 단톡방 양식에 맞게 메시지 조립
+                msg_text = f"""{deal_type}
+-주소 : {dong} {bunji} {sub_dong} {room}호
+-보증금 : {formatted_deposit}원, {formatted_rent}원
+-입주 : {move_in}~{move_out}
+-계약일 : {contract_date}
+{memo}"""
+
+                payload = {"text": msg_text}
+                res = requests.post(webhook_url, json=payload)
+                
+                if res.status_code == 200:
+                    st.success("🎉 시트 저장 및 카카오워크 단톡방 보고가 완벽하게 완료되었습니다!")
+                    st.balloons()
+                else:
+                    st.warning("⚠️ 시트에는 저장되었으나, 카카오워크 발송에 실패했습니다.")
+            except Exception as e:
+                st.error(f"⚠️ 카카오워크 연동 에러가 발생했습니다: {e}")
